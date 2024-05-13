@@ -44,7 +44,7 @@ const config_prod = {
     }, 
     twitter: {
       client_id: 'Sm1lOUM0aG9MbG5JbHlxSFlsOGc6MTpjaQ',
-      redirect_uri: 'https%3A%2F%2Famay077.github.io%2Fswarm-check-ins',
+      redirect_uri: 'https%3A%2F%2Famay077.github.io%2Fpppost',
     }
   }}
 
