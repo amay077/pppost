@@ -32,7 +32,7 @@ jobs:
       - run: echo "SPA を生成"
       - run: npm ci
         working-directory: ./
-      - run: npm run build
+      - run: npm run build-prod
         working-directory: ./
 
       - run: echo "pub ブランチに変更（GitHub Pages）"

@@ -7,6 +7,8 @@
   import TwitterConnection from "./TwitterConnection.svelte";
   import { Config } from "../config";
 
+  const built_at = window['built_at'] ?? '';
+
   // localstorage からアクセストークンを取得する
   const accessToken = localStorage.getItem('sci_accessToken');
 
@@ -351,3 +353,6 @@
 
 {/if}
 
+<div>
+  build: {built_at}
+</div>

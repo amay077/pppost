@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --port 8080",
     "build": "vite build",
+    "replace": "node ./script/replace.cjs",
+    "build-prod": "run-s replace build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
@@ -14,6 +16,8 @@
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
     "@tsconfig/svelte": "^5.0.0",
     "bootstrap": "^5.3.2",
+    "mustache": "^4.2.0",
+    "npm-run-all": "^4.1.5",
     "sass": "^1.69.5",
     "svelte": "^4.0.5",
     "svelte-check": "^3.4.6",
