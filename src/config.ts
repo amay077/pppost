@@ -26,8 +26,8 @@ const config_dev = {
 
 const config_prod = {
   CLIENT_ID: 'UBWPEWEM3L1XHICEZ0TJWOHFQ3QZ0KC3XZPHUXRRVWL044ZU',
-  REDIRECT_URI: 'https://amay077.github.io/swarm-check-ins/#/auth',
-  API_ENDPOINT: `https://swarm-check-ins-api.netlify.app/.netlify/functions`,
+  REDIRECT_URI: 'https://amay077.github.io/pppost/#/auth',
+  API_ENDPOINT: `https://pppost-api.netlify.app/.netlify/functions`,
 
   post_targets: {
     mastodon: {
