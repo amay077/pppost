@@ -41,15 +41,15 @@ export type SettingDataType<T extends SettingType> =
   SettingDataTwitter;
 
 export function savePostSetting(data: SettingData) {
-  localStorage.setItem(`sci_setting_${data.type}`, JSON.stringify(data));
+  localStorage.setItem(`ppp_setting_${data.type}`, JSON.stringify(data));
 }
 
 export function loadPostSetting<T extends SettingType>(type: T): SettingDataType<T> | null{
-  const text = localStorage.getItem(`sci_setting_${type}`);
+  const text = localStorage.getItem(`ppp_setting_${type}`);
   if ((text?.length ?? 0) <= 0 ) return null;
   return JSON.parse(text!);
 }
 
 export function deletePostSetting(type: SettingType) {
-  localStorage.removeItem(`sci_setting_${type}`);
+  localStorage.removeItem(`ppp_setting_${type}`);
 }
