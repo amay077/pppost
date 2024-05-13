@@ -33,7 +33,7 @@
   let posting = false;
   let postingVenueId: string | null = null;
 
-  let text = 'aaaa';
+  let text = '';
 
   onMount(async () => {
     console.log(`onMount`);
