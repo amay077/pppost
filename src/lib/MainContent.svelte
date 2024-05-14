@@ -7,7 +7,7 @@
   import TwitterConnection from "./TwitterConnection.svelte";
   import { Config } from "../config";
 
-  const built_at = window['built_at'] ?? '';
+  const built_at = (window as any)['built_at'] ?? '';
 
   // localstorage からアクセストークンを取得する
   const accessToken = localStorage.getItem('sci_accessToken');
@@ -315,7 +315,7 @@
       <textarea class="form-control" id="message" rows="5" bind:value={text} on:change={() => onTextChange()}></textarea>
     </div>    
 
-    <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || Array.from(Object.values(postTo)).every(x => !x)}>
+    <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
 
       {#if posting}
       <div class="spinner-border spinner-border-sm" role="status">
@@ -342,7 +342,11 @@
       </div>
       {/if}
 
-    </button>    
+    </button>
+
+    <button class="btn btn-primary-outlie" on:click="{() => text = ''}" disabled={text.length <= 0}>
+      Clear
+    </button>
     
   </div>
 
