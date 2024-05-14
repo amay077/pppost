@@ -22,11 +22,11 @@ jobs:
         node-version: [17.x]
     steps:
       - run: echo "全てのブランチを clone"
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: publish-site
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
           node-version: v18.17.1
       - run: echo "SPA を生成"
