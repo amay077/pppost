@@ -53,3 +53,12 @@ export function loadPostSetting<T extends SettingType>(type: T): SettingDataType
 export function deletePostSetting(type: SettingType) {
   localStorage.removeItem(`ppp_setting_${type}`);
 }
+
+export function saveMessage(data: { message: string }) {
+  localStorage.setItem(`ppp_message`, JSON.stringify(data));
+}
+export function loadMessage(): { message: string } {
+  const text = localStorage.getItem(`ppp_message`);
+  if ((text?.length ?? 0) <= 0 ) return null;
+  return JSON.parse(text!);
+}

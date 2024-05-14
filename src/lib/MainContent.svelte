@@ -3,7 +3,7 @@
   import MastodonConnection from "./MastodonConnection.svelte";
   import { BskyAgent, RichText, type AtpSessionData } from "@atproto/api";
   import BlueSkyConnection from "./BlueSkyConnection.svelte";
-  import { loadPostSetting, savePostSetting, type SettingDataBluesky, type SettingDataMastodon, type SettingDataTwitter, type SettingType } from "./func";
+  import { loadMessage, loadPostSetting, saveMessage, savePostSetting, type SettingDataBluesky, type SettingDataMastodon, type SettingDataTwitter, type SettingType } from "./func";
   import TwitterConnection from "./TwitterConnection.svelte";
   import { Config } from "../config";
 
@@ -28,14 +28,10 @@
     twitter: postSettings?.twitter?.enabled ?? false,
   };
   
-  const title = window.navigator?.canShare != null ? `Share...` : 'Copy to clipboard';
-  let checkins: any[] = [];
-
   let loading = true;
   let posting = false;
-  let postingVenueId: string | null = null;
-
-  let text = '';
+  
+  let text = loadMessage()?.message ?? '';
 
   onMount(async () => {
     console.log(`onMount`);
@@ -69,13 +65,6 @@
 
       }      
 
-      
-      checkins = [];
-
-      checkins.map((x: any) => {
-        x.appAddress = `${x.venue.location.city}, ${x.venue.location.state}`;
-        x.appPrivate = x.visibility === 'private';
-      });
     } finally {
       loading = false;
     }
@@ -117,6 +106,8 @@
           savePostSetting(v);
         }
       }
+
+      text = '';
     
     } else {
       alert(`${errors.join(', ')}に投稿できませんでした。`);
@@ -285,6 +276,10 @@
       postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
     });
   };
+
+  const onTextChange = () => {
+    saveMessage({ message: text });
+  }
 </script>
 
 
@@ -317,7 +312,7 @@
 
     <div class="mb-3">
       <label for="message" class="form-label">Message:</label>
-      <textarea class="form-control" id="message" rows="5" bind:value={text}></textarea>
+      <textarea class="form-control" id="message" rows="5" bind:value={text} on:change={() => onTextChange()}></textarea>
     </div>    
 
     <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || Array.from(Object.values(postTo)).every(x => !x)}>
