@@ -108,6 +108,7 @@
       }
 
       text = '';
+      onTextChange();
     
     } else {
       alert(`${errors.join(', ')}に投稿できませんでした。`);
@@ -254,7 +255,7 @@
 
       if (res.ok) {
         const resJson = await res.json();
-        console.log(`FIXME h_oku 後で消す  -> postToTwritter -> resJson:`, resJson);
+        console.log(`FIXME 後で消す  -> postToTwritter -> resJson:`, resJson);
         settings.access_token_response.refresh_token = resJson.refresh_token;
         savePostSetting(settings);
       } else {
@@ -344,7 +345,10 @@
 
     </button>
 
-    <button class="btn btn-primary-outlie" on:click="{() => text = ''}" disabled={text.length <= 0}>
+    <button class="btn btn-primary-outlie" on:click="{() => {
+      text = '';
+      onTextChange();
+    }}" disabled={text.length <= 0}>
       Clear
     </button>
     
