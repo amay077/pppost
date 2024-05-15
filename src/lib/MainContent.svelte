@@ -5,6 +5,7 @@ import BlueskyConnection from "./BlueskyConnection2.svelte";
 import { loadMessage, saveMessage } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
 import { connectToTwitter, onChangePostSettings, postSettings, postTo, postToSns } from "./MainContent";
+  import ImagePreview from "./ImagePreview.svelte";
 
 const built_at = (window as any)['built_at'] ?? '';
 
@@ -125,11 +126,13 @@ const post = async () => {
     }}" disabled={text.length <= 0}>
       Clear
     </button>
+
+    <ImagePreview></ImagePreview>
     
   </div>
 
 {/if}
 
-<div>
+<div class="mt-4">
   build: {built_at}
 </div>
