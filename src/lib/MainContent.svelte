@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import MastodonConnection from "./MastodonConnection.svelte";
-import BlueskyConnection from "./BlueskyConnection.svelte";
+import BlueskyConnection from "./BlueskyConnection2.svelte";
 import { loadMessage, saveMessage } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
 import { connectToTwitter, onChangePostSettings, postSettings, postTo, postToSns } from "./MainContent";
