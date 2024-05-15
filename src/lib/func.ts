@@ -15,7 +15,7 @@ export type SettingDataMastodon = {
 
 export type SettingDataBluesky = {
   type: 'bluesky',
-  title: 'BlueSky',
+  title: 'Bluesky',
   enabled: boolean,
   data: {
     sessionData: AtpSessionData,
@@ -57,7 +57,7 @@ export function deletePostSetting(type: SettingType) {
 export function saveMessage(data: { message: string }) {
   localStorage.setItem(`ppp_message`, JSON.stringify(data));
 }
-export function loadMessage(): { message: string } {
+export function loadMessage(): { message: string } | null {
   const text = localStorage.getItem(`ppp_message`);
   if ((text?.length ?? 0) <= 0 ) return null;
   return JSON.parse(text!);

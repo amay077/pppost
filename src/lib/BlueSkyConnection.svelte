@@ -5,7 +5,7 @@
 
   const dispatch = createEventDispatcher<{ onChange: void }>();
 
-  let expandedBlueSky = false;
+  let expandedBluesky = false;
 
   let bskyServer = 'https://bsky.social';
 
@@ -27,25 +27,25 @@
 
     if (res.success == false) {
       console.error(`onApplyBSkySettings -> res:`, res);
-      alert('BlueSky に接続できませんでした。');
+      alert('Bluesky に接続できませんでした。');
       return;
     }
     
     const sessionData = res.data;
-    postSettings = { type: 'bluesky', title: 'BlueSky', enabled: true, data: { sessionData } };
+    postSettings = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData } };
     savePostSetting(postSettings);
     dispatch('onChange');
-    alert('BlueSky に接続しました。');
+    alert('Bluesky に接続しました。');
   };
 </script>
 
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="d-flex flex-row gap-1 align-items-center" style="cursor: pointer; width: 100%;"  on:click={() => {
-    expandedBlueSky = !expandedBlueSky;
+    expandedBluesky = !expandedBluesky;
   }}>
-    <h5 class="mb-0">BlueSky</h5>
-    {#if !expandedBlueSky}
+    <h5 class="mb-0">Bluesky</h5>
+    {#if !expandedBluesky}
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-chevron-right" viewBox="0 0 16 16">
       <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
     </svg>
@@ -55,7 +55,7 @@
     </svg>
     {/if}
   </div>
-  {#if expandedBlueSky}
+  {#if expandedBluesky}
   <div class="p-2">
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
