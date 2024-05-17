@@ -18,7 +18,7 @@ const config_dev = {
       },
     },
     twitter: {
-      client_id: 'S0xEaFFFeE9KZ2F3SnZ0TWt4dlE6MTpjaQ',
+      client_id: 'cFdITnRJb2t6Z1FYTktjUmU0WFg6MTpjaQ',
       redirect_uri: 'http%3A%2F%2Flocalhost%3A8080',
     }
   }
@@ -43,7 +43,7 @@ const config_prod = {
       }
     }, 
     twitter: {
-      client_id: 'S0xEaFFFeE9KZ2F3SnZ0TWt4dlE6MTpjaQ',
+      client_id: 'cFdITnRJb2t6Z1FYTktjUmU0WFg6MTpjaQ',
       redirect_uri: 'https%3A%2F%2Famay077.github.io%2Fpppost',
     }
   }}
