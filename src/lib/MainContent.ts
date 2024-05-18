@@ -217,7 +217,7 @@ const postToTwritter = async (text: string): Promise<boolean> => {
     if (res.ok) {
       const resJson = await res.json();
       console.log(`FIXME 後で消す  -> postToTwritter -> resJson:`, resJson);
-      settings.access_token_response.refresh_token = resJson.refresh_token;
+      //settings.access_token_response.refresh_token = resJson.refresh_token;
       savePostSetting(settings);
     } else {
       return false;
