@@ -1,10 +1,22 @@
 <script lang="ts">
 import { onMount } from "svelte";
-  import { loadImageAsDataURL } from "./image-func";
+import { loadImageAsDataURL } from "./image-func";
+// import Croppie from "croppie";
+import 'croppie/croppie.css'
+import Croppie, { CroppieOptions } from 'croppie';
+
+
 
 let imageDataURLs: string[] = [];
 
 onMount(async () => {
+  
+  // const Croppie = import("croppie");
+  // worker.start();
+  // const opts = {};
+  const c = new Croppie(document.getElementById('item'), opts);
+// call a method
+// c.method(args);
 });
 
 const onChange = async (evt: any) => {

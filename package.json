@@ -23,9 +23,11 @@
     "svelte-check": "^3.4.6",
     "tslib": "^2.6.0",
     "typescript": "^5.0.2",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "@types/croppie": "^2.6.4"
   },
   "dependencies": {
-    "@atproto/api": "^0.12.7"
+    "@atproto/api": "^0.12.7",
+    "croppie": "^2.6.5"
   }
 }
