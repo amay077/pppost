@@ -24,7 +24,10 @@ export async function connectToTwitter(params: URLSearchParams) {
 
   if (res.ok) {
     const data = await res.json();
-    postSettings.twitter = { type: 'twitter', title: 'Twitter', enabled: true, access_token_response: { refresh_token: data.refresh_token } };
+    postSettings.twitter = { type: 'twitter', title: 'Twitter', enabled: true, access_token_response: { 
+      refresh_token: data.refresh_token, 
+      access_token: data.access_token 
+    } };
     savePostSetting(postSettings.twitter);
     postTo.twitter = true;
     alert('Twitter に接続しました。');
@@ -204,6 +207,7 @@ const postToBluesky = async (text: string): Promise<boolean> => {
 const postToTwritter = async (text: string): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
+    const access_token = settings.access_token_response.access_token;
     const refresh_token = settings.access_token_response.refresh_token;
 
     const res = await fetch(`${Config.API_ENDPOINT}/twitter_post`, {
@@ -211,13 +215,14 @@ const postToTwritter = async (text: string): Promise<boolean> => {
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ refresh_token, text }),
+      body: JSON.stringify({ access_token, refresh_token, text }),
     });
 
     if (res.ok) {
       const resJson = await res.json();
       console.log(`FIXME 後で消す  -> postToTwritter -> resJson:`, resJson);
-      //settings.access_token_response.refresh_token = resJson.refresh_token;
+      settings.access_token_response.refresh_token = resJson.refresh_token;
+      settings.access_token_response.access_token = resJson.access_token;
       savePostSetting(settings);
     } else {
       return false;
