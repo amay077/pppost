@@ -20,7 +20,9 @@ export const postTo: { [K in SettingType]: boolean } = {
 
 export async function connectToTwitter(params: URLSearchParams) {
   const code = params.get('code') ?? '';
-  const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${code}`)
+
+  const redirect_uri = encodeURIComponent(Config.post_targets.twitter.redirect_uri);
+  const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${code}&redirect_uri=${redirect_uri}`);
 
   if (res.ok) {
     const data = await res.json();
