@@ -18,6 +18,18 @@ export const postTo: { [K in SettingType]: boolean } = {
   twitter: postSettings?.twitter?.enabled ?? false,
 };
 
+export async function getApiVersion(): Promise<{ build_at: string, env_ver: string }> {
+
+  const res = await fetch(`${Config.API_ENDPOINT}/ver`);
+
+  if (res.ok) {
+    const data = await res.json();
+    return data;
+  } else {
+    return { build_at: 'unknown', env_ver: 'unknown' };
+  }
+}
+
 export async function connectToTwitter(params: URLSearchParams) {
   const code = params.get('code') ?? '';
 
