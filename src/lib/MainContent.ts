@@ -160,54 +160,83 @@ const postToBluesky = async (text: string): Promise<boolean> => {
 
     await rt.detectFacets(agent) // automatically detects mentions and links
 
-    // const embed = await (async () => {
-    //   const uri =  await findUrlInText(rt);
-    //   if (uri == null) return undefined;
-
-    //   // fetchで画像データを取得
-    //   const res = await fetch('swarm_ogp_image.png');
-    //   const buffer = await res.arrayBuffer();
+    const getOgp = async (url: string) => {
+      try {
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        const response = await fetch(proxyUrl);
+        const html = await response.text();
+        const domParser = new DOMParser();
+        const dom = domParser.parseFromString(html, 'text/html');
+        const ogp = Object.fromEntries([...dom.head.children].filter(
+          (element) =>
+            element.tagName === 'META' &&
+            element.getAttribute('property')?.startsWith('og:')
+          ).map((element) => {
+            return [
+              element.getAttribute('property'),
+              element.getAttribute('content')
+            ];
+          })
+        );
+        console.log(ogp);
+        return ogp;          
+      } catch (error) {
+        console.error(`getOgp -> error:`, error);
+        return undefined;
+      }
       
-    //   const ogInfo = {
-    //     siteUrl: uri,
-    //     type: 'getswarm:checkin',
-    //     description: `${checkin?.venue?.categories?.[0]?.name ?? ''} in ${checkin?.appAddress ?? ''}`,
-    //     title: checkin?.venue?.name ?? 'no name',
-    //     imageData: new Uint8Array(buffer),
-    //   };
+    };
 
-    //   // 画像をアップロードしてIDを取得
-    //   const uploadedRes = await agent.uploadBlob(ogInfo.imageData, {
-    //     encoding: "image/jpeg",
-    //   });
+    const embed = await (async () => {
+      const uri =  await findUrlInText(rt);
+      if (uri == null) return undefined;
 
-    //   // OGP 付きで投稿
-    //   return {
-    //     $type: 'app.bsky.embed.external',
-    //     external: {
-    //       uri,
-    //       thumb: {
-    //         $type: "blob",
-    //         ref: {
-    //           $link: uploadedRes.data.blob.ref.toString(),
-    //         },
-    //         mimeType: uploadedRes.data.blob.mimeType,
-    //         size: uploadedRes.data.blob.size,
-    //       },            
-    //       title: ogInfo.title,
-    //       description: ogInfo.description,
-    //     }
-    //   }      
-    // })();
+      const ogp = await getOgp(uri);
+      if (ogp == null) return undefined;
 
+      try {
+        // fetchで画像データを取得
+        const imageUrl = ogp['og:image'];
+        const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(imageUrl)}`);
+        const imageContentType = res.headers.get('content-type') ?? 'image/jpeg';
+        console.log(res.headers);
+        const buffer = await res.arrayBuffer();
+        const imageData = new Uint8Array(buffer);
+        
+        // 画像をアップロードしてIDを取得
+        const uploadedRes = await agent.uploadBlob(imageData, {
+          encoding: imageContentType,
+        });
 
+        // OGP 付きで投稿
+        return {
+          $type: 'app.bsky.embed.external',
+          external: {
+            uri,
+            thumb: {
+              $type: "blob",
+              ref: {
+                $link: uploadedRes.data.blob.ref.toString(),
+              },
+              mimeType: uploadedRes.data.blob.mimeType,
+              size: uploadedRes.data.blob.size,
+            },            
+            title: ogp['og:title'] ?? ' ',
+            description: ogp['og:description'] ?? ' ',
+          }
+        }              
+      } catch (error) {
+        console.error(`embed -> error:`, error);
+        return undefined;
+      }
+    })();
 
     const postRecord = {
       $type: 'app.bsky.feed.post',
       text: rt.text,
       facets: rt.facets,
       createdAt: new Date().toISOString(),
-      // embed,
+      embed,
     };
 
     await agent.post(postRecord);       
