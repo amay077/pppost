@@ -4,7 +4,7 @@ import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection2.svelte";
 import { loadMessage, saveMessage } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
-import { connectToTwitter, getApiVersion, onChangePostSettings, postSettings, postTo, postToSns } from "./MainContent";
+import { getApiVersion, onChangePostSettings, postSettings, postTo, postToSns } from "./MainContent";
 
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
@@ -19,11 +19,11 @@ onMount(async () => {
 
   try {
 
-    const url = new URL(window.location.href);
-    const params = new URLSearchParams(url.search);
-    if (params.get('state') == 'twitter_callback' && params.has('code')) {
-      await connectToTwitter(params);
-    }
+    // const url = new URL(window.location.href);
+    // const params = new URLSearchParams(url.search);
+    // if (params.get('state') == 'twitter_callback' && params.has('code')) {
+    //   await connectToTwitter(params);
+    // }
 
 
     apiVer = await getApiVersion();

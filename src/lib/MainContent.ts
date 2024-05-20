@@ -30,33 +30,33 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
   }
 }
 
-export async function connectToTwitter(params: URLSearchParams) {
-  const code = params.get('code') ?? '';
+// export async function connectToTwitter(params: URLSearchParams) {
+//   const code = params.get('code') ?? '';
 
-  const redirect_uri = encodeURIComponent(Config.post_targets.twitter.redirect_uri);
-  const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${code}&redirect_uri=${redirect_uri}`);
+//   const redirect_uri = encodeURIComponent(Config.post_targets.twitter.redirect_uri);
+//   const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${code}&redirect_uri=${redirect_uri}`);
 
-  if (res.ok) {
-    const data = await res.json();
-    postSettings.twitter = { type: 'twitter', title: 'Twitter', enabled: true, access_token_response: { 
-      refresh_token: data.refresh_token, 
-      access_token: data.access_token 
-    } };
-    savePostSetting(postSettings.twitter);
-    postTo.twitter = true;
-    alert('Twitter に接続しました。');
-  } else {
-    console.error(`twitter 接続エラー -> res:`, res);
-    alert('Twitter に接続できませんでした。');
-  }
+//   if (res.ok) {
+//     const data = await res.json();
+//     postSettings.twitter = { type: 'twitter', title: 'Twitter', enabled: true, access_token_response: { 
+//       refresh_token: data.refresh_token, 
+//       access_token: data.access_token 
+//     } };
+//     savePostSetting(postSettings.twitter);
+//     postTo.twitter = true;
+//     alert('Twitter に接続しました。');
+//   } else {
+//     console.error(`twitter 接続エラー -> res:`, res);
+//     alert('Twitter に接続できませんでした。');
+//   }
   
-  const url = new URL(window.location.href);
-  params.delete('code');
-  params.delete('state');
-  url.hash = '';
-  url.search = params.toString();
-  history.replaceState(null, '', url.toString());  
-}
+//   const url = new URL(window.location.href);
+//   params.delete('code');
+//   params.delete('state');
+//   url.hash = '';
+//   url.search = params.toString();
+//   history.replaceState(null, '', url.toString());  
+// }
 
 export const postToSns = async (text: string): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
@@ -250,22 +250,22 @@ const postToBluesky = async (text: string): Promise<boolean> => {
 const postToTwritter = async (text: string): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
-    const access_token = settings.access_token_response.access_token;
-    const refresh_token = settings.access_token_response.refresh_token;
+    const accessToken = settings.access_token_response.accessToken;
+    const accessSecret = settings.access_token_response.accessSecret;
 
     const res = await fetch(`${Config.API_ENDPOINT}/twitter_post`, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ access_token, refresh_token, text }),
+      body: JSON.stringify({ accessToken, accessSecret, text }),
     });
 
     if (res.ok) {
       const resJson = await res.json();
       console.log(`FIXME 後で消す  -> postToTwritter -> resJson:`, resJson);
-      settings.access_token_response.refresh_token = resJson.refresh_token;
-      settings.access_token_response.access_token = resJson.access_token;
+      // settings.access_token_response.refresh_token = resJson.refresh_token;
+      // settings.access_token_response.access_token = resJson.access_token;
       savePostSetting(settings);
     } else {
       return false;
