@@ -11,6 +11,7 @@
 
   let oAuthToken = '';
   let pinCode = '';
+  let oAuthData = '';
 
   const onConnectToTwitter = async () => {
 
@@ -22,8 +23,9 @@
       body: JSON.stringify({ }),
     });
 
-    const { url, oauth_token } = await res.json();
+    const { url, oauth_token, data } = await res.json();
     oAuthToken = oauth_token;
+    oAuthData = data;
 
     // const redirect_uri = encodeURIComponent(Config.post_targets.twitter.redirect_uri);
     // const url = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${Config.post_targets.twitter.client_id}&redirect_uri=${redirect_uri}&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=twitter_callback&code_challenge=challenge&code_challenge_method=plain`;
@@ -34,7 +36,7 @@
 
   export async function onApplyTwitterPinCode() {
 
-    const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${pinCode}&oauth_token=${oAuthToken}`);
+    const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${pinCode}&oauth_token=${oAuthToken}&data=${oAuthData}`);
 
     if (res.ok) {
       const data = await res.json();
