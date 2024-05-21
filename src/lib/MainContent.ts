@@ -30,34 +30,6 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
   }
 }
 
-// export async function connectToTwitter(params: URLSearchParams) {
-//   const code = params.get('code') ?? '';
-
-//   const redirect_uri = encodeURIComponent(Config.post_targets.twitter.redirect_uri);
-//   const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${code}&redirect_uri=${redirect_uri}`);
-
-//   if (res.ok) {
-//     const data = await res.json();
-//     postSettings.twitter = { type: 'twitter', title: 'Twitter', enabled: true, access_token_response: { 
-//       refresh_token: data.refresh_token, 
-//       access_token: data.access_token 
-//     } };
-//     savePostSetting(postSettings.twitter);
-//     postTo.twitter = true;
-//     alert('Twitter に接続しました。');
-//   } else {
-//     console.error(`twitter 接続エラー -> res:`, res);
-//     alert('Twitter に接続できませんでした。');
-//   }
-  
-//   const url = new URL(window.location.href);
-//   params.delete('code');
-//   params.delete('state');
-//   url.hash = '';
-//   url.search = params.toString();
-//   history.replaceState(null, '', url.toString());  
-// }
-
 export const postToSns = async (text: string): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
@@ -276,13 +248,3 @@ const postToTwritter = async (text: string): Promise<boolean> => {
     return false;       
   }
 };    
-
-export const onChangePostSettings = () => {
-  postSettings.mastodon = loadPostSetting('mastodon');
-  postSettings.bluesky = loadPostSetting('bluesky');
-  postSettings.twitter = loadPostSetting('twitter');
-
-  Object.entries(postTo).forEach(([k, v]) => {
-    postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
-  });
-};

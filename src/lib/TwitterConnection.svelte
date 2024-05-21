@@ -37,6 +37,7 @@
   export async function onApplyTwitterPinCode() {
 
     const res = await fetch(`${Config.API_ENDPOINT}/twitter_token?code=${pinCode}&oauth_token=${oAuthToken}&data=${oAuthData}`);
+    pinCode = '';
 
     if (res.ok) {
       const data = await res.json();
@@ -45,18 +46,12 @@
         accessSecret: data.accessSecret 
       } };
       savePostSetting(postSettings);
+      dispatch('onChange');
       alert('Twitter に接続しました。');
     } else {
       console.error(`twitter 接続エラー -> res:`, res);
       alert('Twitter に接続できませんでした。');
     }
-    
-    // const url = new URL(window.location.href);
-    // params.delete('code');
-    // params.delete('state');
-    // url.hash = '';
-    // url.search = params.toString();
-    // history.replaceState(null, '', url.toString());  
   }
 </script>
 
@@ -93,12 +88,13 @@
     {:else}
     <div class="d-flex flex-column gap-1">
       <div class="d-flex flex-column gap-1">
-        <div class="d-flex flex-row gap-1">
+        <div class="d-flex flex-row align-items-center gap-1">
+          <span>1.</span>
           <button class="btn btn-sm btn-primary" style="width: 60px;" on:click={onConnectToTwitter}>接続</button>
         </div>
       </div>
       <div class="d-flex flex-column gap-1">
-        <span>2.認証コードを貼り付けて設定</span>
+        <span>2.PINコードを貼り付けて設定</span>
         <div class="d-flex flex-row gap-1">
           <input class="form-control form-control-sm" type="text" bind:value={pinCode}>
           <button class="btn btn-sm btn-primary" disabled={pinCode?.length <= 0} style="width: 60px;" on:click={onApplyTwitterPinCode}>設定</button>

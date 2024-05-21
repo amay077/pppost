@@ -1,10 +1,10 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import MastodonConnection from "./MastodonConnection.svelte";
-import BlueskyConnection from "./BlueskyConnection2.svelte";
-import { loadMessage, saveMessage } from "./func";
+import BlueskyConnection from "./BlueskyConnection.svelte";
+import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
-import { getApiVersion, onChangePostSettings, postSettings, postTo, postToSns } from "./MainContent";
+import { getApiVersion, postSettings, postTo, postToSns } from "./MainContent";
 
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
@@ -57,6 +57,17 @@ const post = async () => {
     posting = false;
   }
 }
+
+const onChangePostSettings = () => {
+  postSettings.mastodon = loadPostSetting('mastodon');
+  postSettings.bluesky = loadPostSetting('bluesky');
+  postSettings.twitter = loadPostSetting('twitter');
+
+  Object.entries(postTo).forEach(([k, v]) => {
+    postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
+  });
+};
+
 
 </script>
 
