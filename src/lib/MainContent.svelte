@@ -101,7 +101,14 @@ const onChangePostSettings = () => {
 
     <div class="mb-3">
       <label for="message" class="form-label">Message:</label>
-      <textarea class="form-control" id="message" rows="5" bind:value={text} on:change={() => onTextChange()}></textarea>
+      <textarea 
+        class="form-control" 
+        id="message" 
+        rows="5" 
+        bind:value={text} 
+        on:change={() => onTextChange()}
+        disabled={posting}
+      ></textarea>
     </div>    
 
     <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
