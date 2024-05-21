@@ -42,7 +42,7 @@
     }
     
     const resJson = await res.json();
-    postSettings = { type: 'mastodon', title: 'Mastodon', enabled: true, server: settings.server, access_token_response: resJson };
+    postSettings = { type: 'mastodon', title: 'Mastodon', enabled: true, server: settings.server, token_data: resJson };
     savePostSetting(postSettings);
     dispatch('onChange');
 

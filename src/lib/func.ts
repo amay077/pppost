@@ -5,7 +5,7 @@ export type SettingDataMastodon = {
   title: 'Mastodon',
   enabled: boolean,
   server: string,
-  access_token_response: {
+  token_data: {
     access_token: string,
     token_type: string,
     scope: string,
@@ -26,9 +26,8 @@ export type SettingDataTwitter = {
   type: 'twitter',
   title: 'Twitter',
   enabled: boolean,
-  access_token_response: {
-    accessToken: string,
-    accessSecret: string,
+  token_data: {
+    token: string,
   }
 };
 

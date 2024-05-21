@@ -72,7 +72,7 @@ const postToMastodon = async (text: string): Promise<boolean> => {
   try {
     const settings = postSettings.mastodon!;
     const MASTODON_HOST = settings.server;
-    const ACCESS_TOKEN = settings.access_token_response.access_token;
+    const ACCESS_TOKEN = settings.token_data.access_token;
     const status = text;
     const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
       method: 'POST',
@@ -222,23 +222,19 @@ const postToBluesky = async (text: string): Promise<boolean> => {
 const postToTwritter = async (text: string): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
-    const accessToken = settings.access_token_response.accessToken;
-    const accessSecret = settings.access_token_response.accessSecret;
+    const token = settings.token_data.token;
 
     const res = await fetch(`${Config.API_ENDPOINT}/twitter_post`, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ accessToken, accessSecret, text }),
+      body: JSON.stringify({ token, text }),
     });
 
     if (res.ok) {
       const resJson = await res.json();
       console.log(`FIXME 後で消す  -> postToTwritter -> resJson:`, resJson);
-      // settings.access_token_response.refresh_token = resJson.refresh_token;
-      // settings.access_token_response.access_token = resJson.access_token;
-      savePostSetting(settings);
     } else {
       return false;
     }

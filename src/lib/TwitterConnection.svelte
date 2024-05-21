@@ -41,10 +41,9 @@
 
     if (res.ok) {
       const data = await res.json();
-      postSettings = { type: 'twitter', title: 'Twitter', enabled: true, access_token_response: { 
-        accessToken: data.accessToken, 
-        accessSecret: data.accessSecret 
-      } };
+      postSettings = { type: 'twitter', title: 'Twitter', enabled: true, token_data: { 
+        token: data.token,
+      }};
       savePostSetting(postSettings);
       dispatch('onChange');
       alert('Twitter に接続しました。');
