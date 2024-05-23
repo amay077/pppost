@@ -40,13 +40,13 @@ export const postToSns = async (text: string): Promise<{ errors: string[] }> => 
   for (const type of enableTypes) {
     switch (type) {
     case 'mastodon':
-      promises.push(postToMastodon(text).catch(() => errors.push('Mastodon')));
+      promises.push(postToMastodon(text).then((r) => { if (!r) errors.push('Mastodon') }));
       break;
     case 'bluesky':
-      promises.push(postToBluesky(text).catch(() => errors.push('Bluesky')));
+      promises.push(postToBluesky(text).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'twitter':
-      promises.push(postToTwritter(text).catch(() => errors.push('Twitter')));
+      promises.push(postToTwritter(text).then((r) => { if (!r) errors.push('Twitter') }));
       break;
     }
 
@@ -222,13 +222,17 @@ const postToTwritter = async (text: string): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
     const token = settings.token_data.token;
-
+    const images: string[] = [
+      /*
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII',
+      */
+    ];
     const res = await fetch(`${Config.API_ENDPOINT}/twitter_post`, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ token, text }),
+      body: JSON.stringify({ token, text, images }),
     });
 
     if (res.ok) {
