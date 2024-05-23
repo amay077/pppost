@@ -34,24 +34,23 @@ export const postToSns = async (text: string): Promise<{ errors: string[] }> => 
   const errors: string[] = [];
 
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
+
+  const promises = [];
+  
   for (const type of enableTypes) {
     switch (type) {
     case 'mastodon':
-      if (!(await postToMastodon(text))) {
-        errors.push('Mastodon');
-      }
+      promises.push(postToMastodon(text).catch(() => errors.push('Mastodon')));
       break;
-      case 'bluesky':
-      if (!(await postToBluesky(text))) {
-        errors.push('Bluesky');
-      }
+    case 'bluesky':
+      promises.push(postToBluesky(text).catch(() => errors.push('Bluesky')));
       break;
     case 'twitter':
-      if (!(await postToTwritter(text))) {
-        errors.push('Twitter');
-      }
+      promises.push(postToTwritter(text).catch(() => errors.push('Twitter')));
       break;
     }
+
+    await Promise.allSettled(promises);
   }
 
   if (errors.length == 0) {
