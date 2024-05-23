@@ -5,6 +5,7 @@ import BlueskyConnection from "./BlueskyConnection.svelte";
 import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
 import { getApiVersion, postSettings, postTo, postToSns } from "./MainContent";
+import ImagePreview from "./ImagePreview.svelte";
 
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
@@ -13,6 +14,7 @@ let loading = true;
 let posting = false;
 
 let text = loadMessage()?.message ?? '';
+let imageDataURLs: string[] = [];
 
 onMount(async () => {
   console.log(`onMount`);
@@ -41,7 +43,7 @@ const post = async () => {
   try {
     posting = true;
   
-    const res = await postToSns(text);
+    const res = await postToSns(text, imageDataURLs);
 
     if (res.errors.length == 0) {
       text = '';
@@ -146,6 +148,10 @@ const onChangePostSettings = () => {
     }}" disabled={text.length <= 0}>
       Clear
     </button>
+
+    <ImagePreview
+      imageDataURLs={imageDataURLs}
+    ></ImagePreview>
     
   </div>
 

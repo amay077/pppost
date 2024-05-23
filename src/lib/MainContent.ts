@@ -30,7 +30,7 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
   }
 }
 
-export const postToSns = async (text: string): Promise<{ errors: string[] }> => {
+export const postToSns = async (text: string, imageDataURLs: string[]): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
@@ -46,7 +46,7 @@ export const postToSns = async (text: string): Promise<{ errors: string[] }> => 
       promises.push(postToBluesky(text).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'twitter':
-      promises.push(postToTwritter(text).then((r) => { if (!r) errors.push('Twitter') }));
+      promises.push(postToTwritter(text, imageDataURLs).then((r) => { if (!r) errors.push('Twitter') }));
       break;
     }
 
@@ -218,15 +218,15 @@ const postToBluesky = async (text: string): Promise<boolean> => {
   }
 }; 
 
-const postToTwritter = async (text: string): Promise<boolean> => {
+const postToTwritter = async (text: string, images: string[]): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
     const token = settings.token_data.token;
+    /*
     const images: string[] = [
-      /*
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII',
-      */
     ];
+    */
     const res = await fetch(`${Config.API_ENDPOINT}/twitter_post`, {
       method: 'POST',
       headers: {
