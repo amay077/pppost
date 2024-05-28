@@ -133,7 +133,7 @@ const postToBluesky = async (text: string): Promise<boolean> => {
 
     const getOgp = async (url: string) => {
       try {
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        const proxyUrl = `${Config.API_ENDPOINT}/cors_proxy?url=${encodeURIComponent(url)}`;
         const response = await fetch(proxyUrl);
         const html = await response.text();
         const domParser = new DOMParser();
