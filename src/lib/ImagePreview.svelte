@@ -9,6 +9,8 @@ import 'croppie/croppie.css'
 
 export let imageDataURLs: string[] = [];
 
+let fileInput: any;
+
 onMount(async () => {
   
   // const Croppie = import("croppie");
@@ -40,30 +42,26 @@ const onChange = async (evt: any) => {
 
 <div class="d-flex flex-column">
 
-  <div
-    class="d-flex flex-row align-items-center justify-content-center p-2"
-  >
-    <!-- 
-      #fileInput 
-      (change)="onChangeFileInput()"
-      (click)="onClickFileInputButton()"
-    -->
-    <input type="file" style="display: inherit"  accept="image/*"  multiple on:change={onChange} />
-    <div style="width: 70%;">
-      <button class="btn btn-lg btn-block btn-primary" ><i class="fa fa-plus" aria-hidden="true"></i>&nbsp;画像を追加</button>
-    </div>
-    <div style="width: 30%; padding-left: 8px;">
-      <!-- [disabled]="previews.length == 0" -->
-      <!-- (click)="onClearImages()" -->
-      <button  class="btn btn-lg btn-block btn-secondary" >クリア</button>
-    </div>
+  <div class="d-flex flex-row align-items-center justify-content-between">
+    <input bind:this={fileInput} type="file" style="display: none" accept="image/*"  multiple on:change={onChange} />
+    <button class="btn btn-sm btn-block btn-primary" 
+    on:click={() => {
+      fileInput.click()
+    }}
+    >
+      <i class="fa fa-plus" aria-hidden="true"></i>&nbsp;画像を追加
+    </button>
+    <button class="btn btn-sm btn-block btn-secondary"
+      on:click={() => {
+        imageDataURLs = [];
+      }}
+    >クリア</button>
   </div>
 
-  <div>
+  <div class="mt-2 d-flex flex-row gap-2 flex-wrap">
     {#each imageDataURLs as dataURL, index }
-    <div class="d-flex" style="min-width: 200px; max-width: 200px;">
-      <span>{index}</span>
-      <img src={dataURL} alt="dummy" style="object-fit: contain; min-width: 200px; max-width: 200px;">
+    <div class="d-flex flex-row align-items-center" style="min-width: 200px; max-width: 200px; border: 1px solid #DFDFDF; border-radius: 3px;">
+      <img src={dataURL} alt="dummy" style="padding: 2px; object-fit: contain; min-width: 200px; max-width: 200px;">
     </div>
     {/each}
   </div>
