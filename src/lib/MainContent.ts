@@ -43,7 +43,7 @@ export const postToSns = async (text: string, imageDataURLs: string[]): Promise<
       promises.push(postToMastodon(text, imageDataURLs).then((r) => { if (!r) errors.push('Mastodon') }));
       break;
     case 'bluesky':
-      promises.push(postToBluesky(text).then((r) => { if (!r) errors.push('Bluesky') }));
+      promises.push(postToBluesky(text, imageDataURLs).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'twitter':
       promises.push(postToTwritter(text, imageDataURLs).then((r) => { if (!r) errors.push('Twitter') }));
@@ -142,7 +142,7 @@ async function findUrlInText(rt: RichText): Promise<string | null> {
   return null;
 }
 
-const postToBluesky = async (text: string): Promise<boolean> => {
+const postToBluesky = async (text: string, imageDataURLs: string[]): Promise<boolean> => {
   try {
     const agent = new BskyAgent({
       service: 'https://bsky.social',
@@ -157,6 +157,53 @@ const postToBluesky = async (text: string): Promise<boolean> => {
     await agent.refreshSession();
     postSettings.bluesky = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData: agent.session as AtpSessionData } };
     savePostSetting(postSettings.bluesky);
+
+    const getWidHei = (image: string) => {
+      return new Promise<any>(r => {
+        const img = new Image();
+        img.onload = () => {
+          r({ width: img.width, height: img.height });
+        }
+        img.src = image;        
+      })
+    };
+
+    const embedImages = await (async () => {
+      const images = [];
+      for (const image of imageDataURLs) {
+        const file = await url2File(image, 'image');
+        const arr = await file.arrayBuffer();
+    
+        const dataArray: Uint8Array = new Uint8Array(arr);
+        const { data: result } = await agent.uploadBlob(
+          dataArray,
+          {
+            encoding: file.type,
+          }
+        );
+
+        const { width, height } = await getWidHei(image);        
+  
+        images.push({
+          alt: file.name,
+          image: result.blob, // 画像投稿時にレスポンスをここで渡すことにより、投稿と画像を紐付け
+          aspectRatio: {
+            // 画像のアスペクト比を指定 (指定しないと真っ黒になるので注意)
+            width,
+            height
+          }
+        });
+      }
+
+      if (images.length <= 0) {
+        return undefined;
+      }
+
+      return {
+        $type: 'app.bsky.embed.images',
+        images
+      };
+    })();
 
 
     // creating richtext
@@ -193,7 +240,7 @@ const postToBluesky = async (text: string): Promise<boolean> => {
       
     };
 
-    const embed = await (async () => {
+    const embedOgp = await (async () => {
       const uri =  await findUrlInText(rt);
       if (uri == null) return undefined;
 
@@ -242,7 +289,7 @@ const postToBluesky = async (text: string): Promise<boolean> => {
       text: rt.text,
       facets: rt.facets,
       createdAt: new Date().toISOString(),
-      embed,
+      embed: embedImages ?? embedOgp,
     };
 
     await agent.post(postRecord);       
