@@ -40,7 +40,7 @@ export const postToSns = async (text: string, imageDataURLs: string[]): Promise<
   for (const type of enableTypes) {
     switch (type) {
     case 'mastodon':
-      promises.push(postToMastodon(text).then((r) => { if (!r) errors.push('Mastodon') }));
+      promises.push(postToMastodon(text, imageDataURLs).then((r) => { if (!r) errors.push('Mastodon') }));
       break;
     case 'bluesky':
       promises.push(postToBluesky(text).then((r) => { if (!r) errors.push('Bluesky') }));
@@ -67,19 +67,54 @@ export const postToSns = async (text: string, imageDataURLs: string[]): Promise<
   return { errors };
 };  
 
-const postToMastodon = async (text: string): Promise<boolean> => {
+async function url2File(url: string, fileName: string): Promise<File>{
+  const blob = await (await fetch(url)).blob()
+  return new File([blob], fileName, {type: blob.type})
+}
+
+const postToMastodon = async (text: string, images: string[]): Promise<boolean> => {
   try {
     const settings = postSettings.mastodon!;
     const MASTODON_HOST = settings.server;
     const ACCESS_TOKEN = settings.token_data.access_token;
     const status = text;
+
+    const media_ids = await (async () => {
+      const ids = [];
+      for (const dataURL of images) {
+
+        const file = await url2File(dataURL, 'image003.png');
+        const formData = new FormData();
+        formData.append('file', file);
+    
+        const res = await fetch(`https://${MASTODON_HOST}/api/v1/media`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+          },
+          body: formData,
+        });
+
+        if (res.ok) {
+          const j = await res.json();
+          ids.push(j.id);
+          console.log(`j`, j)
+        } else {
+          console.error(`j`, [res.status, res.statusText, await res.json()])
+          
+        }
+
+        return ids.length > 0 ? ids : undefined;
+      }
+    })();
+
     const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, media_ids }),
     });
 
     if (res.ok) {
