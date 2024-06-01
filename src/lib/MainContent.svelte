@@ -28,7 +28,6 @@ onMount(async () => {
     // }
 
 
-    apiVer = await getApiVersion();
   } finally {
     loading = false;
   }
@@ -47,7 +46,8 @@ const post = async () => {
 
     if (res.errors.length == 0) {
       text = '';
-      onTextChange();    
+      onTextChange();
+      imageDataURLs = [];
       alert('投稿しました。');
     } else {
       alert(`${res.errors.join(', ')}に投稿できませんでした。`);
@@ -70,6 +70,9 @@ const onChangePostSettings = () => {
   });
 };
 
+const onVersion = async () => { 
+  apiVer = await getApiVersion();
+}
 
 </script>
 
@@ -160,7 +163,12 @@ const onChangePostSettings = () => {
 {/if}
 
 <div class="mt-4 d-flex flex-column align-items-end" style="font-size: 90%;">
+  <button class="btn btn-sm btn-block btn-link"
+    on:click={onVersion}
+  >Version</button>
+  {#if apiVer.env_ver?.length > 0}
   <span>spa_build: {built_at}</span>
   <span>api_build: {apiVer.build_at}</span>
   <span>api_ver: {apiVer.env_ver}</span>
+  {/if}
 </div>
