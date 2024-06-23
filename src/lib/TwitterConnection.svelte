@@ -26,9 +26,6 @@
     const { url, oauth_token, data } = await res.json();
     oAuthToken = oauth_token;
     oAuthData = data;
-
-    // const redirect_uri = encodeURIComponent(Config.post_targets.twitter.redirect_uri);
-    // const url = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${Config.post_targets.twitter.client_id}&redirect_uri=${redirect_uri}&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=twitter_callback&code_challenge=challenge&code_challenge_method=plain`;
     
     // url を別タブで開く
     window.open(url, '_blank');

@@ -7,7 +7,7 @@
 
   let expandedMastodon = false;
 
-  const mastodonTargets = Object.values(Config.post_targets.mastodon);
+  const mastodonTargets = Config.post_targets.mastodon;
   let mastodonServer = 'mastodon.cloud';
   let mastodonCode = '';
 
