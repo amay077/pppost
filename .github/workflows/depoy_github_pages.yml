@@ -10,6 +10,9 @@ on:
 permissions:
   contents: write
 
+env:
+  VITE_MASTODON_SERVER01: ${{ vars.VITE_MASTODON_SERVER01
+
 defaults:
   run:
     working-directory: ./
