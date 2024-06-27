@@ -108,14 +108,23 @@ const postToMastodon = async (text: string, images: string[]): Promise<boolean> 
       }
     })();
 
-    const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
+    // const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
+    //   method: 'POST',
+    //   headers: {
+    //     'Authorization': `Bearer ${ACCESS_TOKEN}`,
+    //     'Content-Type': 'application/json',
+    //   },
+    //   body: JSON.stringify({ status, media_ids }),
+    // });
+
+    const res = await fetch(`${Config.API_ENDPOINT}/mastodon_post`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ status, media_ids }),
+      body: JSON.stringify({ host: MASTODON_HOST, token: settings.token_data.access_token, status, media_ids }),
     });
+
 
     if (res.ok) {
     } else {
