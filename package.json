@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@atproto/api": "^0.12.7",
-    "croppie": "^2.6.5"
+    "croppie": "^2.6.5",
+    "vite-plugin-pwa": "^0.20.0"
   }
 }
