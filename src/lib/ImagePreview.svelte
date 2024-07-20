@@ -22,9 +22,6 @@ onMount(async () => {
 
 	// ペーストイベントの処理を付ける
 	document.addEventListener("paste", async (event: any) => {
-		// デフォルトの動作を禁止する。
-		event.preventDefault();
-
     for (const items of event?.clipboardData?.items ?? []) {
       if (!items?.type?.startsWith(`image/`)) {
         continue;
