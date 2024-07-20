@@ -19,6 +19,23 @@ onMount(async () => {
   // const c = new Croppie(document.getElementById('item'), opts);
 // call a method
 // c.method(args);
+
+	// ペーストイベントの処理を付ける
+	document.addEventListener("paste", async (event: any) => {
+		// デフォルトの動作を禁止する。
+		event.preventDefault();
+
+    for (const items of event?.clipboardData?.items ?? []) {
+      if (!items?.type?.startsWith(`image/`)) {
+        continue;
+      }
+
+      const file = items.getAsFile();
+      const url = await loadImageAsDataURL(file)
+      imageDataURLs = [...imageDataURLs, url];
+    }
+	});
+
 });
 
 const onChange = async (evt: any) => {
