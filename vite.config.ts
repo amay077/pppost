@@ -4,7 +4,6 @@ import { VitePWA, VitePWAOptions } from 'vite-plugin-pwa'  // これを追加
 
 const pwaOptions: Partial<VitePWAOptions> = {
   strategies: 'generateSW' as 'generateSW', // デフォルトなので不要
-  registerType: 'prompt' as 'prompt',       // デフォルトなので不要
   manifest: {
     name: 'PPPOST',
     short_name: 'PPPOST',
