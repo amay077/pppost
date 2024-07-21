@@ -22,7 +22,7 @@ const pwaOptions: Partial<VitePWAOptions> = {
     theme_color: '#399918',
     lang: 'ja',
     share_target: {
-      action: '/index.html',
+      action: './index.html',
       params: {
         title: 'title',
         text: 'text',
