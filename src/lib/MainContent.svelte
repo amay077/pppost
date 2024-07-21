@@ -27,6 +27,16 @@ onMount(async () => {
     //   await connectToTwitter(params);
     // }
 
+    const urlParams = new URLSearchParams(window.location.search);
+
+    const content = urlParams.get('text');
+    const url = urlParams.get('url');
+
+    if ((content?.length ?? 0) > 0) {
+      text = content ?? '';
+    } else if ((url?.length ?? 0) > 0) {
+      text = url ?? '';
+    }
 
   } finally {
     loading = false;

@@ -21,6 +21,15 @@ const pwaOptions: Partial<VitePWAOptions> = {
     background_color: '#ECFFE6',
     theme_color: '#399918',
     lang: 'ja',
+    share_target: {
+      action: '/',
+      method: 'GET',
+      params: {
+        title: 'title',
+        text: 'text',
+        url: 'url'
+      }
+    }
   },
   // includeAssets: ['ui_icon/*.svg'],
   // devOptions: {
