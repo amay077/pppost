@@ -165,7 +165,7 @@ const onVersion = async () => {
 
 <div class="mt-4">
   <ImagePreview
-    imageDataURLs={imageDataURLs}
+    bind:imageDataURLs={imageDataURLs}
   ></ImagePreview>
 
 </div>
