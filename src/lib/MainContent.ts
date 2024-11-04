@@ -177,13 +177,58 @@ const postToBluesky = async (text: string, imageDataURLs: string[]): Promise<boo
       })
     };
 
+    const resize = async (file: File, max: number): Promise<ArrayBuffer | null> => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx == null) {
+        return null;
+      }
+
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await new Promise(r => img.onload = r);
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      const scale = Math.min(max / img.width, max / img.height);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL(file.type);
+      const arr2 = await fetch(dataUrl).then(r => r.blob()).then(r => r.arrayBuffer());
+      return arr2;
+    }
+
+    const MAX_SIZE = 1000000;
     const embedImages = await (async () => {
       const images = [];
       for (const image of imageDataURLs) {
         const file = await url2File(image, 'image');
-        const arr = await file.arrayBuffer();
-    
-        const dataArray: Uint8Array = new Uint8Array(arr);
+
+        const { width, height } = await getWidHei(image);
+        let zoomRate = MAX_SIZE / file.size;
+        zoomRate = Math.sqrt(zoomRate)
+
+        let resizedArr = await resize(file, width * zoomRate);
+        if (resizedArr == null) {
+          continue;
+        }
+
+        if (resizedArr.byteLength > MAX_SIZE) {
+          resizedArr = await resize(file, width * zoomRate * 0.9);
+          if (resizedArr == null) {
+            continue;
+          }
+        }
+
+        if (resizedArr.byteLength > MAX_SIZE) {
+          resizedArr = await resize(file, width * zoomRate * 0.7);
+          if (resizedArr == null) {
+            continue;
+          }
+        }
+
+        const dataArray: Uint8Array = new Uint8Array(resizedArr);
         const { data: result } = await agent.uploadBlob(
           dataArray,
           {
@@ -191,7 +236,6 @@ const postToBluesky = async (text: string, imageDataURLs: string[]): Promise<boo
           }
         );
 
-        const { width, height } = await getWidHei(image);        
   
         images.push({
           alt: file.name,
