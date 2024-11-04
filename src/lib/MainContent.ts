@@ -104,8 +104,8 @@ const postToMastodon = async (text: string, images: string[]): Promise<boolean> 
           
         }
 
-        return ids.length > 0 ? ids : undefined;
       }
+      return ids.length > 0 ? ids : undefined;
     })();
 
     // const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
