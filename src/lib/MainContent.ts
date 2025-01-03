@@ -1,3 +1,4 @@
+import type { ReplyRef } from "@atproto/api/dist/client/types/app/bsky/feed/post";
 import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataTwitter, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
 import { BskyAgent, RichText, type AtpSessionData } from "@atproto/api";
@@ -30,7 +31,11 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
   }
 }
 
-export const postToSns = async (text: string, imageDataURLs: string[]): Promise<{ errors: string[] }> => {
+export const postToSns = async (text: string, imageDataURLs: string[], options: { reply_to_ids: {
+  mastodon: string,
+  bluesky: string,
+  twitter: string,
+}}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
@@ -40,13 +45,13 @@ export const postToSns = async (text: string, imageDataURLs: string[]): Promise<
   for (const type of enableTypes) {
     switch (type) {
     case 'mastodon':
-      promises.push(postToMastodon(text, imageDataURLs).then((r) => { if (!r) errors.push('Mastodon') }));
+      promises.push(postToMastodon(text, imageDataURLs, options?.reply_to_ids?.mastodon).then((r) => { if (!r) errors.push('Mastodon') }));
       break;
     case 'bluesky':
-      promises.push(postToBluesky(text, imageDataURLs).then((r) => { if (!r) errors.push('Bluesky') }));
+      promises.push(postToBluesky(text, imageDataURLs, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'twitter':
-      promises.push(postToTwritter(text, imageDataURLs).then((r) => { if (!r) errors.push('Twitter') }));
+      promises.push(postToTwritter(text, imageDataURLs, options?.reply_to_ids?.twitter).then((r) => { if (!r) errors.push('Twitter') }));
       break;
     }
 
@@ -72,7 +77,7 @@ async function url2File(url: string, fileName: string): Promise<File>{
   return new File([blob], fileName, {type: blob.type})
 }
 
-const postToMastodon = async (text: string, images: string[]): Promise<boolean> => {
+const postToMastodon = async (text: string, images: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const settings = postSettings.mastodon!;
     const MASTODON_HOST = settings.server;
@@ -122,7 +127,7 @@ const postToMastodon = async (text: string, images: string[]): Promise<boolean> 
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ host: MASTODON_HOST, token: settings.token_data.access_token, status, media_ids }),
+      body: JSON.stringify({ host: MASTODON_HOST, token: settings.token_data.access_token, status, media_ids, reply_to_id }),
     });
 
 
@@ -151,16 +156,15 @@ async function findUrlInText(rt: RichText): Promise<string | null> {
   return null;
 }
 
-const postToBluesky = async (text: string, imageDataURLs: string[]): Promise<boolean> => {
+const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const agent = new BskyAgent({
       service: 'https://bsky.social',
     });
 
     // resume session
-
-
-    const res = await agent.resumeSession(postSettings.bluesky?.data?.sessionData!);
+    const sessionRes = await agent.resumeSession(postSettings.bluesky?.data?.sessionData!);
+    const did = sessionRes?.data?.did;
 
     // refresh tokens
     await agent.refreshSession();
@@ -337,15 +341,45 @@ const postToBluesky = async (text: string, imageDataURLs: string[]): Promise<boo
       }
     })();
 
+
+    const reply: ReplyRef | undefined = await (async () => {
+      if ((reply_to_id?.length ?? 0) <= 0) {
+        return undefined;
+      }
+
+      const uri = `at://${did}/app.bsky.feed.post/${reply_to_id}`;
+
+      const r = await agent.getPostThread({ uri });
+
+      const th = r?.data?.thread as any;
+      
+      const cid = th?.post?.cid;
+      const parent = { 
+        uri, 
+        cid
+      };
+
+      const root = th?.post?.record?.reply?.root ?? parent;
+
+      return {
+        root,
+        parent
+      }
+    })();
+    
+
     const postRecord = {
       $type: 'app.bsky.feed.post',
       text: rt.text,
       facets: rt.facets,
       createdAt: new Date().toISOString(),
       embed: embedImages ?? embedOgp,
+      reply
     };
 
-    await agent.post(postRecord);       
+    
+    const reso = await agent.post(postRecord);       
+    console.log(`FIXME h_oku 後で消す  -> postToBluesky -> reso:`, reso);
     return true;
   } catch (error) {
     console.error(`postToBluesky -> error:`, error);
@@ -407,7 +441,7 @@ const uploadImage = async (content: string /*file: File*/): Promise<string | nul
   }
 }
 
-const postToTwritter = async (text: string, images: string[]): Promise<boolean> => {
+const postToTwritter = async (text: string, images: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
     const token = settings.token_data.token;
@@ -431,7 +465,7 @@ const postToTwritter = async (text: string, images: string[]): Promise<boolean> 
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ token, text, images: imgs }),
+      body: JSON.stringify({ token, text, images: imgs, reply_to_id }),
     });
 
     if (res.ok) {
