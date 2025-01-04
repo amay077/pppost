@@ -55,11 +55,21 @@ const post = async () => {
 
   try {
     posting = true;
+
+    const getPostId = (url: string) => {
+      if ((url?.length ?? 0) == 0) {
+        return '';
+      }
+
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      return pathParts[pathParts.length - 1];
+    };    
   
     const res = await postToSns(text, imageDataURLs, { reply_to_ids: {
-      mastodon: replyToIdForMastodon,
-      twitter: replyToIdForTwitter,
-      bluesky: replyToIdForBluesky,
+      mastodon: getPostId(replyToIdForMastodon),
+      twitter: getPostId(replyToIdForTwitter),
+      bluesky: getPostId(replyToIdForBluesky),
     } });
 
     if (res.errors.length == 0) {
