@@ -16,6 +16,7 @@ let posting = false;
 let text = loadMessage()?.message ?? '';
 let imageDataURLs: string[] = [];
 
+let expandedReply = false;
 let replyToIdForMastodon = '';
 let replyToIdForBluesky = '';
 let replyToIdForTwitter = '';
@@ -135,7 +136,7 @@ const onVersion = async () => {
 <div class="mt-4">
 
   <div class="mb-3">
-    <label for="message" class="form-label">Message:</label>
+    <span class="h5">Message:</span>
     <textarea 
       class="form-control" 
       id="message" 
@@ -184,9 +185,29 @@ const onVersion = async () => {
 
 </div>
 
-<div class="mt-2 d-flex flex-column align-items-start gap-1">
-  <label for="message" class="form-label">Reply:</label>
+<div class="mt-4 d-flex flex-column align-items-start gap-1">
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="d-flex flex-row align-items-center gap-1" style="cursor: pointer;"  on:click={() => {
+    expandedReply = !expandedReply;
+  }}>
+  
+    <span class="h5">Reply:</span>
+    <div class="d-flex flex-row gap-1 align-items-center">
+    {#if !expandedReply}
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-chevron-right" viewBox="0 0 16 16">
+      <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+    </svg>
+    {:else}
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-chevron-down" viewBox="0 0 16 16">
+      <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+    </svg>
+    {/if}
 
+    </div>
+  </div>
+
+  {#if expandedReply}
   {#if postSettings.mastodon != null && postTo.mastodon}
   <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
     <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-mastodon" viewBox="0 0 16 16">
@@ -211,6 +232,7 @@ const onVersion = async () => {
     </svg>
     <input class="form-control" type="text" placeholder="Tweet URL or ID" bind:value={replyToIdForTwitter}  />    
   </div>
+  {/if}
   {/if}
 
 </div>
