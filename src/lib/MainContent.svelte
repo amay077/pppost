@@ -316,7 +316,7 @@ const getTypes = (post: PresentedPost) => {
 <div class="mt-4 d-flex flex-column align-items-end" style="font-size: 90%;">
   <button class="btn btn-sm btn-block btn-link"
     on:click={onVersion}
-  >Version</button>
+  >version</button>
   {#if apiVer.env_ver?.length > 0}
   <span>spa_build: {built_at}</span>
   <span>api_build: {apiVer.build_at}</span>
