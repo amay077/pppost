@@ -30,6 +30,7 @@
   "dependencies": {
     "@atproto/api": "^0.12.7",
     "croppie": "^2.6.5",
+    "dayjs": "^1.11.13",
     "vite-plugin-pwa": "^0.20.0"
   }
 }

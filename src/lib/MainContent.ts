@@ -2,6 +2,17 @@ import type { ReplyRef } from "@atproto/api/dist/client/types/app/bsky/feed/post
 import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataTwitter, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
 import { BskyAgent, RichText, type AtpSessionData } from "@atproto/api";
+import dayjs from "dayjs";
+
+const bskyEndpoint = 'https://bsky.social';
+
+export type Post = { text: string, url: string, posted_at: Date };
+export type PresentedPost = {
+  display_posted_at: string | undefined,
+  trimmed_text: string,
+  postOfType: { [K in SettingType]: Post | undefined },
+  
+}
 
 export const postSettings: {
   mastodon: SettingDataMastodon | null,
@@ -29,6 +40,81 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
   } else {
     return { build_at: 'unknown', env_ver: 'unknown' };
   }
+}
+
+export const loadMyPosts = async (): Promise<PresentedPost[]> => {
+
+  const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
+
+  const promises = [];
+  
+  for (const type of enableTypes) {
+    switch (type) {
+    case 'mastodon':
+      promises.push(loadMyPostsMastodon().then(posts => ({ type: 'mastodon', posts })));
+      break;
+    case 'bluesky':
+      promises.push(loadMyPostsBluesky().then(posts => ({ type: 'bluesky', posts })));
+      break;
+    case 'twitter':
+      promises.push(loadMyPostsTwritter().then(posts => ({ type: 'twitter', posts })));
+      break;
+    }
+  }  
+  const posts = await Promise.allSettled(promises);
+
+  const succeededPosts = posts.filter((p) => p.status == 'fulfilled').map(x => x.value).reduce((acc, cur) => {
+
+    (cur?.posts ?? []).forEach((p) => {
+      acc.push({ type: cur.type as SettingType, post: p });
+    });
+    
+    return acc;
+  }, [] as { type: SettingType, post: Post }[]);
+
+  const trimText = (text: string) => {
+    const max = 50;
+    if (text.length > max) {
+      return text.substring(0, max) + '...';
+    } else {
+      return text;
+    }
+  }
+
+  const groupByText = (input: { type: SettingType, post: Post }[]): PresentedPost[] => {
+    const grouped: { [key: string]: PresentedPost } = {};
+  
+    input.forEach(({ type, post }) => {
+      const key = post.text.substring(0, 10);
+      if (!grouped[key]) {
+        grouped[key] = {
+          display_posted_at: dayjs(post.posted_at).format('M/DD H:MM'),
+          trimmed_text: trimText(post.text),
+          postOfType: { mastodon: undefined, twitter: undefined, bluesky: undefined }
+        };
+      }
+      grouped[key].postOfType[type] = post;
+    });
+  
+    return Object.values(grouped);
+  }
+  
+  const result = groupByText(succeededPosts ?? []);
+  console.log(result);
+
+  return result;
+
+  return succeededPosts.map((p) => {
+    return {
+      display_posted_at: dayjs(p.post.posted_at).format('M/DD H:MM'),
+      trimmed_text: trimText(p.post.text),
+      postOfType: {
+        mastodon: p.type == 'mastodon' ? p.post : undefined,
+        bluesky: p.type == 'bluesky' ? p.post : undefined,
+        twitter: p.type == 'twitter' ? p.post : undefined,
+      }
+    }
+  });
 }
 
 export const postToSns = async (text: string, imageDataURLs: string[], options: { reply_to_ids: {
@@ -71,6 +157,9 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 
   return { errors };
 };  
+
+
+
 
 async function url2File(url: string, fileName: string): Promise<File>{
   const blob = await (await fetch(url)).blob()
@@ -156,10 +245,98 @@ async function findUrlInText(rt: RichText): Promise<string | null> {
   return null;
 }
 
+const loadMyPostsBluesky = async (): Promise<Post[]> => {
+  try {
+    const agent = new BskyAgent({
+      service: bskyEndpoint,
+    });
+
+    // resume session
+    const sessionRes = await agent.resumeSession(postSettings.bluesky?.data?.sessionData!);
+    const did = sessionRes?.data?.did;
+
+    // refresh tokens
+    await agent.refreshSession();
+    postSettings.bluesky = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData: agent.session as AtpSessionData } };
+    savePostSetting(postSettings.bluesky);
+
+    const res = await agent.getAuthorFeed({ actor: did });
+
+    return (res?.data?.feed ?? []).map((p) => {
+      const post = p.post;
+      const postid = post.uri.substring(post.uri.lastIndexOf('/') + 1);
+      const url = `https://bsky.app/profile/${post.author.handle}/post/${postid}`;
+
+      const posted_at = (post.record as any)['createdAt'] ?? post.indexedAt;
+
+      const text = `${(post.record as any)['text']}`;
+
+      return { text, url, posted_at };
+    });
+  } catch (error) {
+    console.error(`postToBluesky -> error:`, error);
+    return [];
+  }
+}; 
+
+const loadMyPostsTwritter = async (): Promise<Post[]> => {
+  try {
+    const settings = postSettings.twitter!;
+    const token = settings.token_data.token;
+
+    const res = await fetch(`${Config.API_ENDPOINT}/twitter_posts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    if (res.ok) {
+      const resJson = await res.json();
+      console.log(`FIXME 後で消す  -> loadMyPostsTwritter -> resJson:`, resJson);
+      return resJson;
+    } else {
+      return [];
+    }
+  } catch (error) {
+    console.error(`loadMyPostsTwritter -> error:`, error);
+    return [];       
+  }
+};    
+
+const loadMyPostsMastodon = async (): Promise<Post[]> => {
+  try {
+    const settings = postSettings.mastodon!;
+    const host = settings.server;
+    const token = settings.token_data.access_token;
+
+    const res = await fetch(`${Config.API_ENDPOINT}/mastodon_posts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: JSON.stringify({ host, token }),
+    });
+
+    if (res.ok) {
+      const resJson = await res.json();
+      console.log(`FIXME 後で消す  -> loadMyPostsMastodon -> resJson:`, resJson);
+      return resJson;
+    } else {
+      return [];
+    }
+  } catch (error) {
+    console.error(`loadMyPostsMastodon -> error:`, error);
+    return [];       
+  }
+};    
+
+
 const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const agent = new BskyAgent({
-      service: 'https://bsky.social',
+      service: bskyEndpoint,
     });
 
     // resume session
@@ -377,9 +554,13 @@ const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id:
       reply
     };
 
+
+    // const res = await agent.getAuthorFeed({ actor: did });
+    // console.log(`FIXME h_oku 後で消す  -> postToBluesky -> res:`, res);
     
+     
     const reso = await agent.post(postRecord);       
-    console.log(`FIXME h_oku 後で消す  -> postToBluesky -> reso:`, reso);
+    console.log(`FIXME h_oku 後で消す  -> postToBluesky -> reso:`);
     return true;
   } catch (error) {
     console.error(`postToBluesky -> error:`, error);

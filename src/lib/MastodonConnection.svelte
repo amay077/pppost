@@ -19,7 +19,7 @@
       console.error(`onApplyMastodonAccessToken -> settings:`, settings);
       return;
     }
-    const url = `https://${settings.server}/oauth/authorize?client_id=${settings.client_id}&response_type=code&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=write`;
+    const url = `https://${settings.server}/oauth/authorize?client_id=${settings.client_id}&response_type=code&redirect_uri=urn:ietf:wg:oauth:2.0:oob&scope=read+write`;
     
     // url を別タブで開く
     window.open(url, '_blank');

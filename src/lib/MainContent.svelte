@@ -4,13 +4,16 @@ import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
-import { getApiVersion, postSettings, postTo, postToSns } from "./MainContent";
+import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost } from "./MainContent";
 import ImagePreview from "./ImagePreview.svelte";
+  import dayjs from "dayjs";
 
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
+let myPosts: PresentedPost[] =[];
 
 let loading = true;
+let loadingMyPosts = false;
 let posting = false;
 
 let text = loadMessage()?.message ?? '';
@@ -20,6 +23,15 @@ let expandedReply = false;
 let replyToIdForMastodon = '';
 let replyToIdForBluesky = '';
 let replyToIdForTwitter = '';
+let replyToPost: PresentedPost = { 
+  display_posted_at: undefined, 
+  trimmed_text: '', 
+  postOfType: {
+    mastodon: undefined,
+    bluesky: undefined,
+    twitter: undefined,
+  }
+};
 
 onMount(async () => {
   console.log(`onMount`);
@@ -68,9 +80,9 @@ const post = async () => {
     };    
   
     const res = await postToSns(text, imageDataURLs, { reply_to_ids: {
-      mastodon: getPostId(replyToIdForMastodon),
-      twitter: getPostId(replyToIdForTwitter),
-      bluesky: getPostId(replyToIdForBluesky),
+      mastodon: getPostId(replyToPost?.postOfType['mastodon']?.url ?? replyToIdForMastodon),
+      twitter: getPostId(replyToPost?.postOfType['twitter']?.url ?? replyToIdForTwitter),
+      bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url ?? replyToIdForBluesky),
     } });
 
     if (res.errors.length == 0) {
@@ -80,6 +92,15 @@ const post = async () => {
       replyToIdForMastodon = '';
       replyToIdForBluesky = '';
       replyToIdForTwitter = '';
+      replyToPost = { 
+        display_posted_at: undefined, 
+        trimmed_text: '', 
+        postOfType: {
+          mastodon: undefined,
+          bluesky: undefined,
+          twitter: undefined,
+        }
+      };
       alert('投稿しました。');
     } else {
       alert(`${res.errors.join(', ')}に投稿できませんでした。`);
@@ -104,6 +125,19 @@ const onChangePostSettings = () => {
 
 const onVersion = async () => { 
   apiVer = await getApiVersion();
+}
+
+const onLoadMyPosts = async () => { 
+  myPosts = [];
+  loadingMyPosts = true;
+  myPosts = await loadMyPosts();
+  loadingMyPosts = false;
+}
+
+const getTypes = (post: PresentedPost) => {
+  // console.log(`FIXME h_oku 後で消す  -> getTypes -> post:`, post);
+  const types = Object.entries(post.postOfType).filter(([k, v]) => v != null).map(([k, v]) => k);
+  return types.length > 0 ? `(${types.join(', ')})` : '';
 }
 
 </script>
@@ -178,6 +212,18 @@ const onVersion = async () => {
 
   <button class="btn btn-primary-outline" on:click="{() => {
     text = '';
+    replyToIdForMastodon = '';
+    replyToIdForBluesky = '';
+    replyToIdForTwitter = '';
+    replyToPost = { 
+      display_posted_at: undefined, 
+      trimmed_text: '', 
+      postOfType: {
+        mastodon: undefined,
+        bluesky: undefined,
+        twitter: undefined,
+      }
+    };
     onTextChange();
   }}" disabled={text.length <= 0}>
     Clear
@@ -208,6 +254,26 @@ const onVersion = async () => {
   </div>
 
   {#if expandedReply}
+
+  <button class="btn btn-sm btn-primary" on:click={onLoadMyPosts}>
+    {#if loadingMyPosts}
+    <div class="spinner-border spinner-border-sm" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    {/if}
+    Load my posts
+  </button>
+  <select class="form-select form-select-sm" bind:value={replyToPost}>
+    <option>Manual reply</option>
+    {#each myPosts as post}
+    <option value={post}>{post.display_posted_at} - {post.trimmed_text} {getTypes(post)}</option>
+    {/each}
+  </select>
+
+  {#if replyToPost.display_posted_at == undefined}
+
+  <div class="my-2"> - OR - </div>
+
   {#if postSettings.mastodon != null && postTo.mastodon}
   <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
     <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-mastodon" viewBox="0 0 16 16">
@@ -232,6 +298,7 @@ const onVersion = async () => {
     </svg>
     <input class="form-control" type="text" placeholder="Tweet URL or ID" bind:value={replyToIdForTwitter}  />    
   </div>
+  {/if}
   {/if}
   {/if}
 
