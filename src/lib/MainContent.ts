@@ -484,11 +484,24 @@ const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id:
       try {
         // fetchで画像データを取得
         const imageUrl = ogp['og:image'];
-        const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(imageUrl)}`);
-        const imageContentType = res.headers.get('content-type') ?? 'image/jpeg';
-        console.log(res.headers);
-        const buffer = await res.arrayBuffer();
-        const imageData = new Uint8Array(buffer);
+        // const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(imageUrl)}`);
+
+        const fetchImageUrl = `${Config.API_ENDPOINT}/fetch_image?url=${encodeURIComponent(imageUrl)}`;
+        const res = await fetch(fetchImageUrl);
+
+        const dataURI = await res.text();
+        const [head, image] = dataURI.split(',');
+
+        const parts = head.split(/[:;]/);
+        const imageContentType = parts?.[1] ?? 'image/jpeg';
+
+        // base64文字列をデコード
+        const byteString = atob(image);
+        // デコードされた文字列をUint8Arrayに変換
+        const imageData = new Uint8Array(byteString.length);
+        for (let i = 0; i < byteString.length; i++) {
+          imageData[i] = byteString.charCodeAt(i);
+        }
         
         // 画像をアップロードしてIDを取得
         const uploadedRes = await agent.uploadBlob(imageData, {
