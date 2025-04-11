@@ -14,6 +14,14 @@ export type PresentedPost = {
   
 }
 
+// 画像データの構造を定義 (ImagePreview.svelte から移動)
+export interface ImageData {
+  id: string; // 一意な ID (key 用)
+  originalUrl: string;
+  croppedUrl: string | null; // クロップ後の URL (なければ null)
+  // cropPoints: number[] | undefined; // 削除
+}
+
 export const postSettings: {
   mastodon: SettingDataMastodon | null,
   bluesky: SettingDataBluesky | null,

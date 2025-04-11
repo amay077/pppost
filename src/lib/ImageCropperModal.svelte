@@ -3,10 +3,15 @@
   import Croppie from 'croppie';
   import 'croppie/croppie.css'; // CSS をインポート
 
-  export let imageUrl: string; // 元画像の Data URL
+  export let imageUrl: string; // ★常に元画像の Data URL を受け取るように変更
   export let showModal: boolean = false; // モーダルの表示状態
+  // export let initialCropPoints: number[] | undefined = undefined; // クロップ領域再現不要のため削除
 
-  const dispatch = createEventDispatcher<{ cropComplete: string; cropCancel: void }>();
+  // cropComplete イベントで返すデータの型を定義 (cropPoints を削除)
+  interface CropResult {
+    croppedUrl: string;
+  }
+  const dispatch = createEventDispatcher<{ cropComplete: CropResult; cropCancel: void; resetCrop: void }>(); // resetCrop イベントを追加
 
   let croppieInstance: Croppie | null = null;
   let cropperElement: HTMLElement; // Croppie をバインドする要素
@@ -52,7 +57,8 @@
     if (cropperElement) { // 要素が存在することを確認
         croppieInstance = new Croppie(cropperElement, croppieOptions);
         croppieInstance.bind({
-        url: imageUrl,
+          url: imageUrl,
+          // points: initialCropPoints, // 初期クロップ領域の設定を削除
         });
     } else {
         console.error("Cropper element not found during initialization.");
@@ -75,14 +81,16 @@
     if (!croppieInstance) return;
     try {
       // クロップ結果を Data URL (base64) で取得
-      const result = await croppieInstance.result({
-        type: 'canvas', // 'base64', 'html', 'blob', 'rawcanvas' から選択
-        size: 'original', // 'viewport' から 'original' に変更して元解像度を維持
-        format: 'png', // 'jpeg', 'png', 'webp'
-        quality: 1, // JPEG/WEBP の品質 (0 to 1)
-        circle: false // 円形クロップの場合 true
+      const croppedUrl = await croppieInstance.result({
+        type: 'canvas',
+        size: 'original',
+        format: 'png',
+        quality: 1,
+        circle: false
       });
-      dispatch('cropComplete', result); // 結果を親に通知
+
+      // 結果を親に通知 (cropPoints を削除)
+      dispatch('cropComplete', { croppedUrl: croppedUrl });
       // closeModal(); // 親コンポーネントで showModal を false にする
     } catch (error) {
       console.error('Cropping failed:', error);
@@ -93,15 +101,13 @@
   }
 
   function handleCancel() {
-    dispatch('cropCancel'); // キャンセルを親に通知
-    // closeModal(); // 親コンポーネントで showModal を false にする
+    dispatch('cropCancel');
   }
 
-  // モーダルを閉じる処理は親コンポーネントに任せる
-  // function closeModal() {
-  //   showModal = false; // モーダルを閉じる (双方向バインディングで親にも反映される想定)
-  //   destroyCroppie(); // Croppie インスタンスを破棄
-  // }
+  // 「クロップ前に戻す」ボタンの処理
+  function handleReset() {
+    dispatch('resetCrop'); // リセットイベントを親に通知
+  }
 
 </script>
 
@@ -118,6 +124,7 @@
         <div bind:this={cropperElement}></div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-warning" on:click={handleReset}>クロップ前に戻す</button> <!-- リセットボタン追加 -->
         <button type="button" class="btn btn-secondary" on:click={handleCancel}>キャンセル</button>
         <button type="button" class="btn btn-primary" on:click={handleCrop}>確定</button>
       </div>

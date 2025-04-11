@@ -4,7 +4,7 @@ import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
-import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost } from "./MainContent";
+import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
   import dayjs from "dayjs";
 
@@ -17,7 +17,8 @@ let loadingMyPosts = false;
 let posting = false;
 
 let text = loadMessage()?.message ?? '';
-let imageDataURLs: string[] = [];
+// let imageDataURLs: string[] = []; // 古い形式は削除
+let images: ImageData[] = []; // 新しいデータ構造の配列
 
 let expandedReply = false;
 let replyToIdForMastodon = '';
@@ -79,7 +80,10 @@ const post = async () => {
       return pathParts[pathParts.length - 1];
     };    
   
-    const res = await postToSns(text, imageDataURLs, { reply_to_ids: {
+    // 送信する画像URLリストを作成 (croppedUrlがあれば優先、なければoriginalUrl)
+    const urlsToPost = images.map(img => img.croppedUrl ?? img.originalUrl);
+
+    const res = await postToSns(text, urlsToPost, { reply_to_ids: {
       mastodon: getPostId(replyToPost?.postOfType['mastodon']?.url ?? replyToIdForMastodon),
       twitter: getPostId(replyToPost?.postOfType['twitter']?.url ?? replyToIdForTwitter),
       bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url ?? replyToIdForBluesky),
@@ -88,7 +92,7 @@ const post = async () => {
     if (res.errors.length == 0) {
       text = '';
       onTextChange();
-      imageDataURLs = [];
+      images = []; // 画像配列をクリア
       replyToIdForMastodon = '';
       replyToIdForBluesky = '';
       replyToIdForTwitter = '';
@@ -306,8 +310,8 @@ const getTypes = (post: PresentedPost) => {
 
 <div class="mt-4">
   <ImagePreview
-    bind:imageDataURLs={imageDataURLs}
-  ></ImagePreview>
+    bind:images={images}
+  />
 
 </div>
 
