@@ -1,12 +1,16 @@
 <script lang="ts">
 import { onMount } from "svelte";
+
+// @ts-ignore-next-line
+import twitterText from "twitter-text";
+
 import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
 import TwitterConnection from "./TwitterConnection.svelte";
 import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
-  import dayjs from "dayjs";
+import dayjs from "dayjs";
 
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
@@ -33,6 +37,10 @@ let replyToPost: PresentedPost = {
     twitter: undefined,
   }
 };
+
+// Twitter 文字数カウント
+$: tweetLength = twitterText.parseTweet(text).weightedLength; // エクスポートされた名前空間を使用
+const TWITTER_WARN_LENGTH = 140; // 警告を出す文字数
 
 onMount(async () => {
   console.log(`onMount`);
@@ -183,9 +191,10 @@ const getTypes = (post: PresentedPost) => {
       on:change={() => onTextChange()}
       disabled={posting}
     ></textarea>
-  </div>    
-
-  <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
+  </div>
+  <div class="d-flex justify-content-between align-items-center"> <!-- ボタンと文字数を横並びにするための div -->
+    <div class="d-flex flex-row gap-2"> <!-- ボタンを左寄せするための div -->
+    <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
 
     {#if posting}
     <div class="spinner-border spinner-border-sm" role="status">
@@ -232,7 +241,13 @@ const getTypes = (post: PresentedPost) => {
     onTextChange();
   }}" disabled={text.length <= 0 && images.length <= 0}>
     Clear
-  </button>
+    </button>
+
+    </div> <!-- ボタン左寄せ div 閉じタグ -->
+    <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
+      {tweetLength} / {TWITTER_WARN_LENGTH} 文字
+    </span>
+  </div> <!-- ボタンと文字数横並び div 閉じタグ -->
 
 </div>
 
