@@ -129,12 +129,6 @@
     >
       <i class="fa fa-plus" aria-hidden="true"></i>&nbsp;画像を追加
     </button>
-    <button class="btn btn-sm btn-block btn-secondary"
-      on:click={() => {
-        images = []; // 配列を空にする
-      }}
-      disabled={images.length === 0}
-    >クリア</button>
   </div>
 
   <div class="d-flex flex-row gap-2 flex-wrap">

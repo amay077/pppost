@@ -216,12 +216,13 @@ const getTypes = (post: PresentedPost) => {
 
   <button class="btn btn-primary-outline" on:click="{() => {
     text = '';
+    images = []; // 画像データをクリア
     replyToIdForMastodon = '';
     replyToIdForBluesky = '';
     replyToIdForTwitter = '';
-    replyToPost = { 
-      display_posted_at: undefined, 
-      trimmed_text: '', 
+    replyToPost = {
+      display_posted_at: undefined,
+      trimmed_text: '',
       postOfType: {
         mastodon: undefined,
         bluesky: undefined,
@@ -229,7 +230,7 @@ const getTypes = (post: PresentedPost) => {
       }
     };
     onTextChange();
-  }}" disabled={text.length <= 0}>
+  }}" disabled={text.length <= 0 && images.length <= 0}>
     Clear
   </button>
 
