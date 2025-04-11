@@ -1,6 +1,8 @@
 <script lang="ts">
 import { onMount } from "svelte";
 
+// @ts-ignore-next-line
+import twitterText from "twitter-text";
 
 import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
@@ -10,7 +12,6 @@ import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post,
 import ImagePreview from "./ImagePreview.svelte";
 import dayjs from "dayjs";
 
-let twitterTextModule: any = null; // twitter-text モジュールを格納する変数
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
 let myPosts: PresentedPost[] =[];
@@ -38,8 +39,8 @@ let replyToPost: PresentedPost = {
 };
 
 // Twitter 文字数カウント
-$: tweetLength = twitterTextModule ? twitterTextModule.parseTweet(text).weightedLength : 0; // モジュールがロードされてから計算
-const TWITTER_WARN_LENGTH = 140; // 警告を出す文字数
+$: tweetLength = twitterText.parseTweet(text).weightedLength / 2; // エクスポートされた名前空間を使用
+const TWITTER_WARN_LENGTH = 140; // 現在のTwitterの文字数上限（警告を出す文字数）
 
 onMount(async () => {
   console.log(`onMount`);
@@ -63,15 +64,6 @@ onMount(async () => {
       text = url ?? '';
     }
 
-    // twitter-text を動的にインポート
-    try {
-      // default を取得する必要がある場合がある
-      const module = await import('twitter-text');
-      twitterTextModule = module.default ?? module;
-      console.log('twitter-text loaded successfully'); // デバッグ用
-    } catch (error) {
-      console.error('Failed to load twitter-text:', error);
-    }
   } finally {
     loading = false;
   }
