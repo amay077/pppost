@@ -77,7 +77,7 @@
       // クロップ結果を Data URL (base64) で取得
       const result = await croppieInstance.result({
         type: 'canvas', // 'base64', 'html', 'blob', 'rawcanvas' から選択
-        size: 'viewport', // 'viewport', 'original', または { width, height }
+        size: 'original', // 'viewport' から 'original' に変更して元解像度を維持
         format: 'png', // 'jpeg', 'png', 'webp'
         quality: 1, // JPEG/WEBP の品質 (0 to 1)
         circle: false // 円形クロップの場合 true
