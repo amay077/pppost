@@ -18,7 +18,7 @@ env:
 
 defaults:
   run:
-    working-directory: ./frontend
+    working-directory: frontend
 
 jobs:
   build:
@@ -37,9 +37,9 @@ jobs:
           node-version: v18.17.1
       - run: echo "SPA を生成"
       - run: npm ci
-        working-directory: ./frontend
+        working-directory: frontend
       - run: npm run build-prod
-        working-directory: ./frontend
+        working-directory: frontend
 
       - run: echo "pub ブランチに変更（GitHub Pages）"
       - run: git checkout publish --force
