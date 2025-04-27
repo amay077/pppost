@@ -1,0 +1,41 @@
+POST https://upload.twitter.com/1.1/media/upload.json
+Authorization: Bearer d1VYVTJhUmNzdXlwX3hZVy11U014dE1UdUZXR1BkOXo5VTdoaXhfWW9vS0o3OjE3MTYyMDE1OTk0OTg6MTowOmF0OjE
+Content-type: application/json
+
+{
+  "media_data": "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs="
+}
+####
+
+POST https://api.twitter.com/2/tweets
+Authorization: Bearer xxxxx
+Content-type: application/json
+
+{
+  "text": "Tweeting with media!"
+}
+
+
+#### 
+
+# Post to mastodon
+
+POST https://mastodon.cloud/api/v1/statuses
+Authorization: Bearer ZvW03sgcD7PmuEYZsVw5nw1xu3KgL_x-vafEA6kkPv0
+Content-type: application/json
+
+{
+  "status": "test postttt"
+}
+
+####
+
+POST https://mastodon.cloud/api/v1/apps HTTP/1.1
+Content-Type: application/json
+
+{
+  "client_name": "PPPOST",
+  "redirect_uris": "urn:ietf:wg:oauth:2.0:oob",
+  "scopes": "read write",
+  "website": "https://github.com/amay077/pppost"
+}

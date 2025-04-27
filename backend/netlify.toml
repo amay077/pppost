@@ -1,0 +1,7 @@
+[build]
+  command = "mkdir ./dist && npm run replace"
+  functions = "netlify/functions"
+[[headers]]
+  for = "/*"
+    [headers.values]
+    Access-Control-Allow-Origin = "*"
