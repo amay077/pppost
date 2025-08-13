@@ -17,11 +17,14 @@
   let cropperElement: HTMLElement; // Croppie をバインドする要素
 
   // Croppie のオプション
+  // より大きなboundaryサイズに設定し、画像全体が表示されやすくする
   const croppieOptions: Croppie.CroppieOptions = {
-    viewport: { width: 200, height: 200 }, // 初期ビューポートサイズ (type: 'square' を削除)
-    boundary: { width: 300, height: 300 }, // Croppie 全体のサイズ
+    viewport: { width: 300, height: 300 }, // 初期ビューポートサイズを大きく
+    boundary: { width: 450, height: 450 }, // Croppie 全体のサイズを大きく
     enableExif: true, // EXIF情報を考慮して回転を補正
     enableResize: true, // ビューポートのリサイズを許可
+    showZoomer: true, // ズームスライダーを表示
+    enableOrientation: true, // 回転機能を有効化
   };
 
   onMount(() => {
@@ -39,7 +42,10 @@
     if (showModal && cropperElement && imageUrl) {
       // すでにインスタンスがある場合、URLが変更されたらbindし直す
       if (croppieInstance) {
-         croppieInstance.bind({ url: imageUrl });
+         croppieInstance.bind({ 
+           url: imageUrl,
+           zoom: 0 // 初期ズームレベルを0（最小）に設定
+         });
       } else {
         initializeCroppie();
       }
@@ -58,6 +64,7 @@
         croppieInstance = new Croppie(cropperElement, croppieOptions);
         croppieInstance.bind({
           url: imageUrl,
+          zoom: 0, // 初期ズームレベルを0（最小）に設定して全体を表示
           // points: initialCropPoints, // 初期クロップ領域の設定を削除
         });
     } else {
@@ -151,7 +158,7 @@
     /* Bootstrap のスタイルを参考に */
     background-color: white;
     border-radius: 0.3rem;
-    max-width: 500px; /* 必要に応じて調整 */
+    max-width: 600px; /* モーダルの最大幅を広げる */
     width: 90%;
     box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
     display: flex; /* Ensure content takes up space */
