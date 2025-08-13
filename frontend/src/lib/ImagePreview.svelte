@@ -10,7 +10,16 @@
 
   let fileInput: HTMLInputElement;
   let showCropModal = false;
-  let imageToCropData: { originalUrl: string } | null = null; // cropPoints を削除
+  let imageToCropData: { 
+    originalUrl: string;
+    cropInfo?: {
+      points: number[];
+      zoom: number;
+      orientation: number;
+      viewportWidth: number;
+      viewportHeight: number;
+    };
+  } | null = null;
   let imageIndexToCrop: number | null = null; // クロップ対象のインデックス
 
   onMount(() => {
@@ -63,21 +72,30 @@
     const targetImage = images[index];
     imageToCropData = {
       originalUrl: targetImage.originalUrl,
-      // cropPoints: targetImage.cropPoints, // 削除
+      cropInfo: targetImage.cropInfo, // 保存されているクロップ情報を渡す
     };
     showCropModal = true;
   };
 
-  // クロップ完了時の処理 (event detail から cropPoints を削除)
-  const handleCropComplete = (event: CustomEvent<{ croppedUrl: string }>) => {
+  // クロップ完了時の処理
+  const handleCropComplete = (event: CustomEvent<{ 
+    croppedUrl: string;
+    cropInfo: {
+      points: number[];
+      zoom: number;
+      orientation: number;
+      viewportWidth: number;
+      viewportHeight: number;
+    };
+  }>) => {
     if (imageIndexToCrop === null) return;
 
-    const { croppedUrl } = event.detail; // cropPoints を削除
+    const { croppedUrl, cropInfo } = event.detail;
     const updatedImages = [...images];
     updatedImages[imageIndexToCrop] = {
       ...updatedImages[imageIndexToCrop],
       croppedUrl: croppedUrl, // クロップ後の URL を更新
-      // cropPoints: cropPoints, // 削除
+      cropInfo: cropInfo, // クロップ情報を保存
     };
     images = updatedImages;
 
@@ -97,6 +115,7 @@
     updatedImages[imageIndexToCrop] = {
       ...updatedImages[imageIndexToCrop],
       croppedUrl: null, // クロップ後 URL を null に戻す
+      cropInfo: undefined, // クロップ情報もクリア
     };
     images = updatedImages;
 
@@ -168,6 +187,7 @@
   {#if showCropModal && imageToCropData}
     <ImageCropperModal
       imageUrl={imageToCropData.originalUrl}
+      initialCropInfo={imageToCropData.cropInfo}
       bind:showModal={showCropModal}
       on:cropComplete={handleCropComplete}
       on:cropCancel={handleCropCancel}

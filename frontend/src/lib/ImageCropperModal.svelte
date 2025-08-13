@@ -5,17 +5,32 @@
 
   export let imageUrl: string; // ★常に元画像の Data URL を受け取るように変更
   export let showModal: boolean = false; // モーダルの表示状態
-  // export let initialCropPoints: number[] | undefined = undefined; // クロップ領域再現不要のため削除
+  export let initialCropInfo: {
+    points: number[];
+    zoom: number;
+    orientation: number;
+    viewportWidth: number;
+    viewportHeight: number;
+  } | undefined = undefined; // 初期クロップ情報
 
-  // cropComplete イベントで返すデータの型を定義 (cropPoints を削除)
+  // cropComplete イベントで返すデータの型を定義
   interface CropResult {
     croppedUrl: string;
+    cropInfo: {
+      points: number[];
+      zoom: number;
+      orientation: number;
+      viewportWidth: number;
+      viewportHeight: number;
+    };
   }
   const dispatch = createEventDispatcher<{ cropComplete: CropResult; cropCancel: void; resetCrop: void }>(); // resetCrop イベントを追加
 
   let croppieInstance: Croppie | null = null;
   let cropperElement: HTMLElement; // Croppie をバインドする要素
-  let viewportSize = { width: 300, height: 300 }; // ビューポートサイズを管理
+  let viewportSize = initialCropInfo 
+    ? { width: initialCropInfo.viewportWidth, height: initialCropInfo.viewportHeight }
+    : { width: 300, height: 300 }; // ビューポートサイズを管理
 
   // Croppie のオプション
   // より大きなboundaryサイズに設定し、画像全体が表示されやすくする
@@ -45,7 +60,9 @@
       if (croppieInstance) {
          croppieInstance.bind({ 
            url: imageUrl,
-           zoom: 0 // 初期ズームレベルを0（最小）に設定
+           zoom: initialCropInfo?.zoom ?? 0, // 保存されたズームレベルまたは最小
+           orientation: initialCropInfo?.orientation ?? 1,
+           points: initialCropInfo?.points
          });
       } else {
         initializeCroppie();
@@ -65,8 +82,9 @@
         croppieInstance = new Croppie(cropperElement, croppieOptions);
         croppieInstance.bind({
           url: imageUrl,
-          zoom: 0, // 初期ズームレベルを0（最小）に設定して全体を表示
-          // points: initialCropPoints, // 初期クロップ領域の設定を削除
+          zoom: initialCropInfo?.zoom ?? 0, // 保存されたズームレベルまたは最小
+          orientation: initialCropInfo?.orientation ?? 1, // 保存された回転またはデフォルト
+          points: initialCropInfo?.points, // 保存されたクロップ領域
         });
     } else {
         console.error("Cropper element not found during initialization.");
@@ -88,6 +106,9 @@
   async function handleCrop() {
     if (!croppieInstance) return;
     try {
+      // 現在のクロップ情報を取得
+      const currentOptions = croppieInstance.get();
+      
       // クロップ結果を Data URL (base64) で取得
       const croppedUrl = await croppieInstance.result({
         type: 'canvas',
@@ -97,8 +118,17 @@
         circle: false
       });
 
-      // 結果を親に通知 (cropPoints を削除)
-      dispatch('cropComplete', { croppedUrl: croppedUrl });
+      // 結果を親に通知（クロップ情報も含める）
+      dispatch('cropComplete', { 
+        croppedUrl: croppedUrl,
+        cropInfo: {
+          points: currentOptions.points || [],
+          zoom: currentOptions.zoom || 0,
+          orientation: currentOptions.orientation || 1,
+          viewportWidth: viewportSize.width,
+          viewportHeight: viewportSize.height
+        }
+      });
       // closeModal(); // 親コンポーネントで showModal を false にする
     } catch (error) {
       console.error('Cropping failed:', error);

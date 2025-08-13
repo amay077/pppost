@@ -19,7 +19,13 @@ export interface ImageData {
   id: string; // 一意な ID (key 用)
   originalUrl: string;
   croppedUrl: string | null; // クロップ後の URL (なければ null)
-  // cropPoints: number[] | undefined; // 削除
+  cropInfo?: { // クロップ情報を保存
+    points: number[];
+    zoom: number;
+    orientation: number;
+    viewportWidth: number;
+    viewportHeight: number;
+  };
 }
 
 export const postSettings: {
