@@ -36,7 +36,7 @@
   // より大きなboundaryサイズに設定し、画像全体が表示されやすくする
   const croppieOptions: Croppie.CroppieOptions = {
     viewport: { width: viewportSize.width, height: viewportSize.height }, // 初期ビューポートサイズ
-    boundary: { width: 450, height: 450 }, // Croppie 全体のサイズを大きく
+    boundary: { width: 400, height: 400 }, // モーダルに収まるようサイズ調整
     enableExif: true, // EXIF情報を考慮して回転を補正
     enableResize: false, // ビューポートのリサイズは手動で管理
     showZoomer: true, // ズームスライダーを表示
@@ -304,7 +304,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-warning" on:click={handleReset}>クロップ前に戻す</button> <!-- リセットボタン追加 -->
+        <button type="button" class="btn btn-warning" on:click={handleReset}>戻す</button> <!-- リセットボタン追加 -->
         <button type="button" class="btn btn-secondary" on:click={handleCancel}>キャンセル</button>
         <button type="button" class="btn btn-primary" on:click={handleCrop}>確定</button>
       </div>
@@ -331,7 +331,7 @@
     /* Bootstrap のスタイルを参考に */
     background-color: white;
     border-radius: 0.3rem;
-    max-width: 600px; /* モーダルの最大幅を広げる */
+    max-width: 550px; /* モーダルの最大幅を調整 */
     width: 90%;
     box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
     display: flex; /* Ensure content takes up space */
@@ -371,7 +371,7 @@
     display: flex; /* Center Croppie */
     justify-content: center;
     align-items: center;
-    overflow-y: auto; /* Add scroll if content overflows */
+    overflow: hidden; /* Prevent scrolling */
   }
 
   .cropper-container {
@@ -379,6 +379,8 @@
     flex-direction: column;
     align-items: center;
     gap: 1rem;
+    width: 100%;
+    max-width: 100%;
   }
 
   .viewport-controls {
@@ -433,10 +435,17 @@
   /* :global() を使って Croppie の内部要素にスタイルを適用 */
   :global(.cr-boundary) {
     /* boundary のサイズは options で設定 */
+    max-width: 100% !important;
+    margin: 0 auto;
   }
   :global(.cr-viewport) {
     border: 2px dashed #fff; /* 破線に変更 */
     box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5); /* ビューポート外を暗くする */
+  }
+  
+  /* Croppieコンテナ全体の制約 */
+  :global(.croppie-container) {
+    max-width: 100% !important;
   }
 
   /* Bootstrap の btn-close スタイルがない場合 */
