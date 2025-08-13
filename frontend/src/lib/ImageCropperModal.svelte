@@ -15,14 +15,15 @@
 
   let croppieInstance: Croppie | null = null;
   let cropperElement: HTMLElement; // Croppie をバインドする要素
+  let viewportSize = { width: 300, height: 300 }; // ビューポートサイズを管理
 
   // Croppie のオプション
   // より大きなboundaryサイズに設定し、画像全体が表示されやすくする
   const croppieOptions: Croppie.CroppieOptions = {
-    viewport: { width: 300, height: 300 }, // 初期ビューポートサイズを大きく
+    viewport: { width: viewportSize.width, height: viewportSize.height }, // 初期ビューポートサイズ
     boundary: { width: 450, height: 450 }, // Croppie 全体のサイズを大きく
     enableExif: true, // EXIF情報を考慮して回転を補正
-    enableResize: true, // ビューポートのリサイズを許可
+    enableResize: false, // ビューポートのリサイズは手動で管理
     showZoomer: true, // ズームスライダーを表示
     enableOrientation: true, // 回転機能を有効化
   };
@@ -116,6 +117,114 @@
     dispatch('resetCrop'); // リセットイベントを親に通知
   }
 
+  // ビューポートサイズを変更する関数
+  function adjustViewportSize(dimension: 'width' | 'height', delta: number) {
+    if (!croppieInstance) return;
+    
+    // 新しいサイズを計算（最小100px、最大400px）
+    const newViewportSize = { ...viewportSize };
+    if (dimension === 'width') {
+      newViewportSize.width = Math.max(100, Math.min(400, viewportSize.width + delta));
+    } else {
+      newViewportSize.height = Math.max(100, Math.min(400, viewportSize.height + delta));
+    }
+    viewportSize = newViewportSize;
+    
+    // Croppieインスタンスを再初期化
+    const currentOptions = croppieInstance.get();
+    destroyCroppie();
+    
+    // 新しいビューポートサイズで再初期化
+    const newCroppieOptions = {
+      ...croppieOptions,
+      viewport: { width: newViewportSize.width, height: newViewportSize.height }
+    };
+    
+    if (cropperElement) {
+      croppieInstance = new Croppie(cropperElement, newCroppieOptions);
+      croppieInstance.bind({
+        url: imageUrl,
+        zoom: currentOptions.zoom || 0,
+        orientation: currentOptions.orientation || 1,
+        points: currentOptions.points
+      });
+    }
+  }
+
+  // アスペクト比を設定する関数
+  function setAspectRatio(ratio: string) {
+    if (!croppieInstance) return;
+    
+    let newWidth = viewportSize.width;
+    let newHeight = viewportSize.height;
+    
+    // アスペクト比に基づいて新しいサイズを計算
+    switch (ratio) {
+      case '1:1':
+        newHeight = newWidth;
+        break;
+      case '4:3':
+        newHeight = Math.round(newWidth * 3 / 4);
+        break;
+      case '16:9':
+        newHeight = Math.round(newWidth * 9 / 16);
+        break;
+      case '3:4':
+        newHeight = Math.round(newWidth * 4 / 3);
+        break;
+      case '9:16':
+        newHeight = Math.round(newWidth * 16 / 9);
+        break;
+    }
+    
+    // 制限値内に収める
+    if (newHeight > 400) {
+      newHeight = 400;
+      switch (ratio) {
+        case '1:1':
+          newWidth = newHeight;
+          break;
+        case '4:3':
+          newWidth = Math.round(newHeight * 4 / 3);
+          break;
+        case '16:9':
+          newWidth = Math.round(newHeight * 16 / 9);
+          break;
+        case '3:4':
+          newWidth = Math.round(newHeight * 3 / 4);
+          break;
+        case '9:16':
+          newWidth = Math.round(newHeight * 9 / 16);
+          break;
+      }
+    }
+    
+    // 幅も制限値内に収める
+    newWidth = Math.max(100, Math.min(400, newWidth));
+    newHeight = Math.max(100, Math.min(400, newHeight));
+    
+    viewportSize = { width: newWidth, height: newHeight };
+    
+    // Croppieインスタンスを再初期化
+    const currentOptions = croppieInstance.get();
+    destroyCroppie();
+    
+    const newCroppieOptions = {
+      ...croppieOptions,
+      viewport: { width: newWidth, height: newHeight }
+    };
+    
+    if (cropperElement) {
+      croppieInstance = new Croppie(cropperElement, newCroppieOptions);
+      croppieInstance.bind({
+        url: imageUrl,
+        zoom: currentOptions.zoom || 0,
+        orientation: currentOptions.orientation || 1,
+        points: currentOptions.points
+      });
+    }
+  }
+
 </script>
 
 {#if showModal}
@@ -127,8 +236,42 @@
         <button type="button" class="btn-close" aria-label="Close" on:click={handleCancel}></button>
       </div>
       <div class="modal-body">
-        <!-- Croppie をバインドする要素 -->
-        <div bind:this={cropperElement}></div>
+        <div class="cropper-container">
+          <!-- Croppie をバインドする要素 -->
+          <div bind:this={cropperElement}></div>
+          <!-- ビューポートサイズ調整ボタン -->
+          <div class="viewport-controls">
+            <!-- アスペクト比ボタン -->
+            <div class="aspect-ratio-buttons">
+              <button type="button" class="btn btn-sm btn-outline-primary" on:click={() => setAspectRatio('1:1')}>1:1</button>
+              <button type="button" class="btn btn-sm btn-outline-primary" on:click={() => setAspectRatio('4:3')}>4:3</button>
+              <button type="button" class="btn btn-sm btn-outline-primary" on:click={() => setAspectRatio('16:9')}>16:9</button>
+              <button type="button" class="btn btn-sm btn-outline-primary" on:click={() => setAspectRatio('3:4')}>3:4</button>
+              <button type="button" class="btn btn-sm btn-outline-primary" on:click={() => setAspectRatio('9:16')}>9:16</button>
+            </div>
+            <!-- サイズ調整ボタン -->
+            <div class="size-controls">
+              <div class="viewport-dimension">
+                <span class="dimension-label">幅:</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" on:click={() => adjustViewportSize('width', -25)} disabled={viewportSize.width <= 100}>
+                  <span aria-hidden="true">−</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" on:click={() => adjustViewportSize('width', 25)} disabled={viewportSize.width >= 400}>
+                  <span aria-hidden="true">+</span>
+                </button>
+              </div>
+              <div class="viewport-dimension">
+                <span class="dimension-label">高さ:</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" on:click={() => adjustViewportSize('height', -25)} disabled={viewportSize.height <= 100}>
+                  <span aria-hidden="true">−</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" on:click={() => adjustViewportSize('height', 25)} disabled={viewportSize.height >= 400}>
+                  <span aria-hidden="true">+</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-warning" on:click={handleReset}>クロップ前に戻す</button> <!-- リセットボタン追加 -->
@@ -200,6 +343,47 @@
     align-items: center;
     overflow-y: auto; /* Add scroll if content overflows */
   }
+
+  .cropper-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .viewport-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.5rem;
+  }
+
+  .aspect-ratio-buttons {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .size-controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  .viewport-dimension {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .dimension-label {
+    font-size: 0.875rem;
+    color: #495057;
+    margin-right: 0.25rem;
+  }
+
 
   .modal-footer {
     display: flex;
