@@ -254,8 +254,12 @@ const getTypes = (post: PresentedPost) => {
 <div class="mt-4 d-flex flex-column align-items-start gap-1">
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="d-flex flex-row align-items-center gap-1" style="cursor: pointer;"  on:click={() => {
+  <div class="d-flex flex-row align-items-center gap-1" style="cursor: pointer;"  on:click={async () => {
     expandedReply = !expandedReply;
+    // Reply展開時に毎回投稿を再読み込み（洗い替え）
+    if (expandedReply && !loadingMyPosts) {
+      await onLoadMyPosts();
+    }
   }}>
   
     <span class="h5">Reply:</span>
@@ -269,20 +273,17 @@ const getTypes = (post: PresentedPost) => {
       <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
     </svg>
     {/if}
+    {#if loadingMyPosts}
+    <div class="spinner-border spinner-border-sm" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    {/if}
 
     </div>
   </div>
 
   {#if expandedReply}
 
-  <button class="btn btn-sm btn-primary" on:click={onLoadMyPosts}>
-    {#if loadingMyPosts}
-    <div class="spinner-border spinner-border-sm" role="status">
-      <span class="visually-hidden">Loading...</span>
-    </div>
-    {/if}
-    Load my posts
-  </button>
   <select class="form-select form-select-sm" bind:value={replyToPost}>
     <option>Manual reply</option>
     {#each myPosts as post}
