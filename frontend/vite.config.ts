@@ -17,8 +17,8 @@ const pwaOptions: Partial<VitePWAOptions> = {
     ],
     start_url: 'index.html',
     display: 'standalone',
-    background_color: '#ECFFE6',
-    theme_color: '#399918',
+    background_color: '#1e7e34',
+    theme_color: '#1e7e34',
     lang: 'ja',
     share_target: {
       action: './index.html',
