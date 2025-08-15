@@ -1,5 +1,18 @@
 /* Variables and mixins declared here will be available in all other SCSS files */
+
+// Override Bootstrap primary color to green (darker)
+$primary: #1e7e34;
+$primary-text-emphasis: #1e7e34;
+$primary-bg-subtle: #d1e7dd;
+$primary-border-subtle: #badbcc;
+
 @import "bootstrap/scss/functions"; /* Override Bootstrap's variables here */
+
+// Override color contrast settings
+$min-contrast-ratio: 3;
+$color-contrast-dark: #000;
+$color-contrast-light: #fff;
+
 @import "bootstrap/scss/variables";
 @import "bootstrap/scss/variables-dark";
 @import "bootstrap/scss/maps";

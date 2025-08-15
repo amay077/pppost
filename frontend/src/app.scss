@@ -55,7 +55,7 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  border: 2px solid #007bff; /* 青色 */
+  border: 2px solid #1e7e34; /* 濃い緑色 */
   border-radius: 8px;
 }
 
@@ -78,7 +78,7 @@ body {
 
 /* ボタン */
 .share_button {
-  background-color: #007bff; /* 青色 */
+  background-color: #1e7e34; /* 濃い緑色 */
   color: white;
   border: none;
   padding: 8px 16px;
@@ -88,7 +88,7 @@ body {
 }
 
 .share_button:hover {
-  background-color: #0056b3;
+  background-color: #155724;
 }
 
 .connect_container {
@@ -99,7 +99,7 @@ body {
 }
 
 .connect_button {
-  background-color: #007bff; /* 青色 */
+  background-color: #1e7e34; /* 濃い緑色 */
   font-size: 1.2rem;
   color: white;
   border: none;
@@ -110,7 +110,7 @@ body {
 }
 
 .disconnect_button {
-  background-color: #007bff; /* 青色 */
+  background-color: #1e7e34; /* 濃い緑色 */
   color: white;
   border: none;
   padding: 8px 16px;
@@ -120,9 +120,21 @@ body {
 }
 
 .disconnect_button:hover {
-  background-color: #0056b3;
+  background-color: #155724;
 }
 
 .h5 {
   margin-bottom: 0;
+}
+
+/* Bootstrap primary button text color fix */
+.btn-primary {
+  color: #fff !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary:disabled {
+  color: #fff !important;
 }
