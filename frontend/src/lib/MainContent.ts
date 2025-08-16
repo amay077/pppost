@@ -210,12 +210,19 @@ const postToMastodon = async (text: string, images: string[], reply_to_id: strin
           console.log(`j`, j)
         } else {
           console.error(`j`, [res.status, res.statusText, await res.json()])
-          
+          // 画像アップロードに失敗した場合はnullを返して投稿を中止
+          return null;
         }
 
       }
       return ids.length > 0 ? ids : undefined;
     })();
+
+    // 画像アップロードに失敗した場合は投稿を中止
+    if (images.length > 0 && media_ids === null) {
+      console.error('Failed to upload images for Mastodon post');
+      return false;
+    }
 
     // const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
     //   method: 'POST',
@@ -398,7 +405,8 @@ const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id:
     const MAX_SIZE = 1000000;
     const embedImages = await (async () => {
       const images = [];
-      for (const image of imageDataURLs) {
+      for (let i = 0; i < imageDataURLs.length; i++) {
+        const image = imageDataURLs[i];
         const file = await url2File(image, 'image');
 
         const { width, height } = await getWidHei(image);
@@ -407,41 +415,48 @@ const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id:
 
         let resizedArr = await resize(file, width * zoomRate);
         if (resizedArr == null) {
-          continue;
+          console.error(`Failed to resize image ${i + 1} for Bluesky post`);
+          return null; // リサイズに失敗した場合は投稿を中止
         }
 
         if (resizedArr.byteLength > MAX_SIZE) {
           resizedArr = await resize(file, width * zoomRate * 0.9);
           if (resizedArr == null) {
-            continue;
+            console.error(`Failed to resize image ${i + 1} for Bluesky post (0.9x)`);
+            return null; // リサイズに失敗した場合は投稿を中止
           }
         }
 
         if (resizedArr.byteLength > MAX_SIZE) {
           resizedArr = await resize(file, width * zoomRate * 0.7);
           if (resizedArr == null) {
-            continue;
+            console.error(`Failed to resize image ${i + 1} for Bluesky post (0.7x)`);
+            return null; // リサイズに失敗した場合は投稿を中止
           }
         }
 
-        const dataArray: Uint8Array = new Uint8Array(resizedArr);
-        const { data: result } = await agent.uploadBlob(
-          dataArray,
-          {
-            encoding: file.type,
-          }
-        );
+        try {
+          const dataArray: Uint8Array = new Uint8Array(resizedArr);
+          const { data: result } = await agent.uploadBlob(
+            dataArray,
+            {
+              encoding: file.type,
+            }
+          );
 
-  
-        images.push({
-          alt: file.name,
-          image: result.blob, // 画像投稿時にレスポンスをここで渡すことにより、投稿と画像を紐付け
-          aspectRatio: {
-            // 画像のアスペクト比を指定 (指定しないと真っ黒になるので注意)
-            width,
-            height
-          }
-        });
+          images.push({
+            alt: file.name,
+            image: result.blob, // 画像投稿時にレスポンスをここで渡すことにより、投稿と画像を紐付け
+            aspectRatio: {
+              // 画像のアスペクト比を指定 (指定しないと真っ黒になるので注意)
+              width,
+              height
+            }
+          });
+        } catch (error) {
+          console.error(`Failed to upload image ${i + 1} to Bluesky:`, error);
+          return null; // アップロードに失敗した場合は投稿を中止
+        }
       }
 
       if (images.length <= 0) {
@@ -454,6 +469,11 @@ const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id:
       };
     })();
 
+    // 画像アップロードに失敗した場合は投稿を中止
+    if (imageDataURLs.length > 0 && embedImages === null) {
+      console.error('Failed to process images for Bluesky post');
+      return false;
+    }
 
     // creating richtext
     const rt = new RichText({
@@ -631,6 +651,10 @@ const postToTwritter = async (text: string, images: string[], reply_to_id: strin
       const imageUrl = await uploadImage(image, filename);
       if (imageUrl != null) {
         imgs.push(imageUrl);
+      } else {
+        // 画像アップロードに失敗した場合は投稿を中止
+        console.error(`Failed to upload image ${i + 1} for Twitter post`);
+        return false;
       }
     }
 
