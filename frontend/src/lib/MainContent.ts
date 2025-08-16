@@ -188,40 +188,21 @@ const postToMastodon = async (text: string, images: string[], reply_to_id: strin
     const ACCESS_TOKEN = settings.token_data.access_token;
     const status = text;
 
-    const media_ids = await (async () => {
-      const ids = [];
-      for (const dataURL of images) {
-
-        const file = await url2File(dataURL, 'image003.png');
-        const formData = new FormData();
-        formData.append('file', file);
-    
-        const res = await fetch(`https://${MASTODON_HOST}/api/v1/media`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${ACCESS_TOKEN}`,
-          },
-          body: formData,
-        });
-
-        if (res.ok) {
-          const j = await res.json();
-          ids.push(j.id);
-          console.log(`j`, j)
-        } else {
-          console.error(`j`, [res.status, res.statusText, await res.json()])
-          // 画像アップロードに失敗した場合はnullを返して投稿を中止
-          return null;
-        }
-
+    // 画像をSupabaseにアップロード
+    const imageUrls: string[] = [];
+    for (let i = 0; i < images.length; i++) {
+      const dataURL = images[i];
+      const image = dataURL.split(',')[1];
+      const filename = `mastodon_image_${i + 1}.png`;
+      const imageUrl = await uploadImage(image, filename);
+      
+      if (imageUrl != null) {
+        imageUrls.push(imageUrl);
+      } else {
+        // 画像アップロードに失敗した場合は投稿を中止
+        console.error(`Failed to upload image ${i + 1} for Mastodon post`);
+        return false;
       }
-      return ids.length > 0 ? ids : undefined;
-    })();
-
-    // 画像アップロードに失敗した場合は投稿を中止
-    if (images.length > 0 && media_ids === null) {
-      console.error('Failed to upload images for Mastodon post');
-      return false;
     }
 
     // const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
@@ -238,7 +219,13 @@ const postToMastodon = async (text: string, images: string[], reply_to_id: strin
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ host: MASTODON_HOST, token: settings.token_data.access_token, status, media_ids, reply_to_id }),
+      body: JSON.stringify({ 
+        host: MASTODON_HOST, 
+        token: settings.token_data.access_token, 
+        status, 
+        images: imageUrls,
+        reply_to_id 
+      }),
     });
 
 

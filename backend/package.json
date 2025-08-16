@@ -22,6 +22,7 @@
     "cheerio": "^1.0.0",
     "crypto-js": "^4.2.0",
     "encoding-japanese": "^2.1.0",
+    "form-data": "^4.0.0",
     "jsdom": "^26.0.0",
     "netlify-cli": "^13.0.0",
     "node-fetch": "^2.6.9",
