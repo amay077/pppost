@@ -1,31 +1,23 @@
-import { createClient } from '@supabase/supabase-js';
+import { Config } from '../config';
 
-// Supabase設定を環境変数から取得
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabaseBucketName = import.meta.env.VITE_SUPABASE_BUCKET_NAME || 'img_tmp';
-
-// Supabaseクライアントの初期化
-export const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
-
-export const BUCKET_NAME = supabaseBucketName;
-
-// 画像をSupabaseに直接アップロード
+// 署名付きURLを使用して画像をSupabaseにアップロード
 export async function uploadImageToSupabase(base64Data: string, filename: string = 'image.png'): Promise<string | null> {
-  if (!supabase) {
-    console.error('Supabase client not initialized');
-    return null;
-  }
-
   try {
-    // ユニークなファイル名を生成
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 10);
-    const extension = filename.split('.').pop() || 'png';
-    const fileName = `${timestamp}-${randomStr}.${extension}`;
-    const filePath = `pppost/${fileName}`;
+    // バックエンドから署名付きURLを取得
+    const presignedRes = await fetch(`${Config.API_ENDPOINT}/supabase_presigned_url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ filename }),
+    });
+
+    if (!presignedRes.ok) {
+      console.error('Failed to get presigned URL:', presignedRes.status);
+      return null;
+    }
+
+    const { uploadUrl, publicUrl, token } = await presignedRes.json();
 
     // Base64データをBlobに変換
     const base64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
@@ -37,25 +29,23 @@ export async function uploadImageToSupabase(base64Data: string, filename: string
     }
     
     const byteArray = new Uint8Array(byteNumbers);
+    const extension = filename.split('.').pop() || 'png';
     const blob = new Blob([byteArray], { type: `image/${extension}` });
 
-    // Supabase Storageにアップロード
-    const { data, error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(filePath, blob, {
-        contentType: `image/${extension}`,
-        upsert: false
-      });
+    // 署名付きURLを使用してアップロード
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': `image/${extension}`,
+      },
+      body: blob,
+    });
 
-    if (error) {
-      console.error('Supabase upload error:', error);
+    if (!uploadRes.ok) {
+      console.error('Failed to upload image:', uploadRes.status);
       return null;
     }
-
-    // 公開URLを生成
-    const { data: { publicUrl } } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(filePath);
 
     return publicUrl;
   } catch (error) {

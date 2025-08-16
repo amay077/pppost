@@ -23,26 +23,32 @@ PPPOSTでX（Twitter）の画像投稿にSupabase Storageを使用するため�
 1. 左メニューの「Settings」→「API」を選択
 2. 以下の情報をコピー：
    - **Project URL**: `https://your-project.supabase.co`
-   - **anon public**: `eyJhbGciOiJI...`（公開キー）
+   - **service_role**: `eyJhbGciOiJI...`（Service Roleキー - **秘密情報**）
 
 ## 4. 環境変数の設定
 
-### フロントエンド環境変数
+### バックエンド環境変数（Netlify）
 
-`frontend/.env`ファイルを作成し、以下を設定：
+Netlifyの環境変数に以下を設定：
 
 ```bash
 # SupabaseプロジェクトのURL
-VITE_SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_URL=https://your-project.supabase.co
 
-# Supabase公開キー（anon key）
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
+# Supabase Service Roleキー（秘密情報）
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJI...
 
 # バケット名（作成したバケット名）
-VITE_SUPABASE_BUCKET_NAME=img_tmp
+SUPABASE_BUCKET_NAME=img_tmp
 ```
 
-**注意**: フロントエンドから直接Supabaseにアップロードするため、Netlifyの関数を経由しません。これにより、Netlifyのレート制限を回避できます。
+**重要**: Service Roleキーは秘密情報です。フロントエンドには含めず、バックエンドの環境変数としてのみ設定してください。
+
+**仕組み**: 
+1. フロントエンドがバックエンドに署名付きアップロードURLをリクエスト
+2. バックエンドがSupabaseから一時的なアップロードURLを生成
+3. フロントエンドが直接Supabaseにアップロード
+4. Netlifyの関数を経由しないため、レート制限を回避
 
 ## 5. Storage ポリシーの設定（重要）
 
@@ -76,9 +82,14 @@ Supabaseは初期状態でRLS（Row Level Security）が有効になっている
 
 ## 6. デプロイ
 
-1. フロントエンドの依存関係をインストール：
+1. 両方の依存関係をインストール：
    ```bash
-   cd frontend
+   # バックエンド
+   cd backend
+   npm install
+   
+   # フロントエンド
+   cd ../frontend
    npm install
    ```
 

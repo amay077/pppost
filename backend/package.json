@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/amay077/hello-netlify-functions#readme",
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
     "cheerio": "^1.0.0",
     "crypto-js": "^4.2.0",
     "encoding-japanese": "^2.1.0",
