@@ -3,7 +3,7 @@ import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataTwitter, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
 import { BskyAgent, RichText, type AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
-import { uploadImageToSupabase } from "./supabase-client";
+import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
 
 const bskyEndpoint = 'https://bsky.social';
 
@@ -139,6 +139,25 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 }}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
+  // 画像を一度だけSupabaseにアップロード
+  const uploadedImageUrls: string[] = [];
+  if (imageDataURLs.length > 0) {
+    for (let i = 0; i < imageDataURLs.length; i++) {
+      const dataURL = imageDataURLs[i];
+      const image = dataURL.split(',')[1];
+      const filename = `image_${i + 1}.png`;
+      const imageUrl = await uploadImage(image, filename);
+      
+      if (imageUrl != null) {
+        uploadedImageUrls.push(imageUrl);
+      } else {
+        // 画像アップロードに失敗した場合は投稿を中止
+        console.error(`Failed to upload image ${i + 1}`);
+        return { errors: ['画像のアップロードに失敗しました'] };
+      }
+    }
+  }
+
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
 
   const promises = [];
@@ -146,13 +165,13 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   for (const type of enableTypes) {
     switch (type) {
     case 'mastodon':
-      promises.push(postToMastodon(text, imageDataURLs, options?.reply_to_ids?.mastodon).then((r) => { if (!r) errors.push('Mastodon') }));
+      promises.push(postToMastodon(text, uploadedImageUrls, options?.reply_to_ids?.mastodon).then((r) => { if (!r) errors.push('Mastodon') }));
       break;
     case 'bluesky':
-      promises.push(postToBluesky(text, imageDataURLs, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
+      promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'twitter':
-      promises.push(postToTwritter(text, imageDataURLs, options?.reply_to_ids?.twitter).then((r) => { if (!r) errors.push('Twitter') }));
+      promises.push(postToTwritter(text, uploadedImageUrls, options?.reply_to_ids?.twitter).then((r) => { if (!r) errors.push('Twitter') }));
       break;
     }
 
@@ -160,6 +179,16 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   }
 
   if (errors.length == 0) {
+    // 全てのSNSへの投稿が成功した場合のみ画像を削除
+    if (uploadedImageUrls.length > 0) {
+      console.log('Deleting temporary images from Supabase...');
+      const deleteResult = await deleteImagesFromSupabase(uploadedImageUrls);
+      if (!deleteResult) {
+        console.error('Failed to delete some temporary images');
+      } else {
+        console.log('Temporary images deleted successfully');
+      }
+    }
 
     for (const [k, v] of Object.entries(postSettings)) {
       const type = k as SettingType;
@@ -168,6 +197,9 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
         savePostSetting(v);
       }
     }
+  } else {
+    // エラーがある場合は画像を削除しない（再投稿の可能性があるため）
+    console.log('Post failed, keeping temporary images for retry');
   }
 
   return { errors };
@@ -181,29 +213,12 @@ async function url2File(url: string, fileName: string): Promise<File>{
   return new File([blob], fileName, {type: blob.type})
 }
 
-const postToMastodon = async (text: string, images: string[], reply_to_id: string): Promise<boolean> => {
+const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const settings = postSettings.mastodon!;
     const MASTODON_HOST = settings.server;
     const ACCESS_TOKEN = settings.token_data.access_token;
     const status = text;
-
-    // 画像をSupabaseにアップロード
-    const imageUrls: string[] = [];
-    for (let i = 0; i < images.length; i++) {
-      const dataURL = images[i];
-      const image = dataURL.split(',')[1];
-      const filename = `mastodon_image_${i + 1}.png`;
-      const imageUrl = await uploadImage(image, filename);
-      
-      if (imageUrl != null) {
-        imageUrls.push(imageUrl);
-      } else {
-        // 画像アップロードに失敗した場合は投稿を中止
-        console.error(`Failed to upload image ${i + 1} for Mastodon post`);
-        return false;
-      }
-    }
 
     // const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
     //   method: 'POST',
@@ -342,261 +357,49 @@ const loadMyPostsMastodon = async (): Promise<Post[]> => {
 };    
 
 
-const postToBluesky = async (text: string, imageDataURLs: string[], reply_to_id: string): Promise<boolean> => {
+const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
-    const agent = new BskyAgent({
-      service: bskyEndpoint,
-    });
-
-    // resume session
-    const sessionRes = await agent.resumeSession(postSettings.bluesky?.data?.sessionData!);
-    const did = sessionRes?.data?.did;
-
-    // refresh tokens
-    await agent.refreshSession();
-    postSettings.bluesky = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData: agent.session as AtpSessionData } };
-    savePostSetting(postSettings.bluesky);
-
-    const getWidHei = (image: string) => {
-      return new Promise<any>(r => {
-        const img = new Image();
-        img.onload = () => {
-          r({ width: img.width, height: img.height });
-        }
-        img.src = image;        
-      })
-    };
-
-    const resize = async (file: File, max: number): Promise<ArrayBuffer | null> => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (ctx == null) {
-        return null;
-      }
-
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      await new Promise(r => img.onload = r);
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-      const scale = Math.min(max / img.width, max / img.height);
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL(file.type);
-      const arr2 = await fetch(dataUrl).then(r => r.blob()).then(r => r.arrayBuffer());
-      return arr2;
-    }
-
-    const MAX_SIZE = 1000000;
-    const embedImages = await (async () => {
-      const images = [];
-      for (let i = 0; i < imageDataURLs.length; i++) {
-        const image = imageDataURLs[i];
-        const file = await url2File(image, 'image');
-
-        const { width, height } = await getWidHei(image);
-        let zoomRate = MAX_SIZE / file.size;
-        zoomRate = Math.sqrt(zoomRate)
-
-        let resizedArr = await resize(file, width * zoomRate);
-        if (resizedArr == null) {
-          console.error(`Failed to resize image ${i + 1} for Bluesky post`);
-          return null; // リサイズに失敗した場合は投稿を中止
-        }
-
-        if (resizedArr.byteLength > MAX_SIZE) {
-          resizedArr = await resize(file, width * zoomRate * 0.9);
-          if (resizedArr == null) {
-            console.error(`Failed to resize image ${i + 1} for Bluesky post (0.9x)`);
-            return null; // リサイズに失敗した場合は投稿を中止
-          }
-        }
-
-        if (resizedArr.byteLength > MAX_SIZE) {
-          resizedArr = await resize(file, width * zoomRate * 0.7);
-          if (resizedArr == null) {
-            console.error(`Failed to resize image ${i + 1} for Bluesky post (0.7x)`);
-            return null; // リサイズに失敗した場合は投稿を中止
-          }
-        }
-
-        try {
-          const dataArray: Uint8Array = new Uint8Array(resizedArr);
-          const { data: result } = await agent.uploadBlob(
-            dataArray,
-            {
-              encoding: file.type,
-            }
-          );
-
-          images.push({
-            alt: file.name,
-            image: result.blob, // 画像投稿時にレスポンスをここで渡すことにより、投稿と画像を紐付け
-            aspectRatio: {
-              // 画像のアスペクト比を指定 (指定しないと真っ黒になるので注意)
-              width,
-              height
-            }
-          });
-        } catch (error) {
-          console.error(`Failed to upload image ${i + 1} to Bluesky:`, error);
-          return null; // アップロードに失敗した場合は投稿を中止
-        }
-      }
-
-      if (images.length <= 0) {
-        return undefined;
-      }
-
-      return {
-        $type: 'app.bsky.embed.images',
-        images
-      };
-    })();
-
-    // 画像アップロードに失敗した場合は投稿を中止
-    if (imageDataURLs.length > 0 && embedImages === null) {
-      console.error('Failed to process images for Bluesky post');
+    const sessionData = postSettings.bluesky?.data?.sessionData;
+    if (!sessionData) {
+      console.error('Bluesky session data not found');
       return false;
     }
 
-    // creating richtext
-    const rt = new RichText({
-      text,
+    // バックエンドにリクエストを送信
+    const res = await fetch(`${Config.API_ENDPOINT}/bluesky_post`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionData,
+        text,
+        images: imageUrls,
+        reply_to_id
+      }),
     });
 
-    await rt.detectFacets(agent) // automatically detects mentions and links
-
-    const getOgp = async (url: string) => {
-      try {
-        const proxyUrl = `${Config.API_ENDPOINT}/cors_proxy?url=${encodeURIComponent(url)}`;
-        const response = await fetch(proxyUrl);
-        const html = await response.text();
-        const domParser = new DOMParser();
-        const dom = domParser.parseFromString(html, 'text/html');
-        const ogp = Object.fromEntries([...dom.head.children].filter(
-          (element) =>
-            element.tagName === 'META' &&
-            element.getAttribute('property')?.startsWith('og:')
-          ).map((element) => {
-            return [
-              element.getAttribute('property'),
-              element.getAttribute('content')
-            ];
-          })
-        );
-        console.log(ogp);
-        return ogp;          
-      } catch (error) {
-        console.error(`getOgp -> error:`, error);
-        return undefined;
+    if (res.ok) {
+      const resJson = await res.json();
+      console.log(`postToBluesky response:`, resJson);
+      
+      // 新しいセッションデータを保存
+      if (resJson.sessionData) {
+        postSettings.bluesky = { 
+          type: 'bluesky', 
+          title: 'Bluesky', 
+          enabled: true, 
+          data: { sessionData: resJson.sessionData }
+        };
+        savePostSetting(postSettings.bluesky);
       }
       
-    };
-
-    const embedOgp = await (async () => {
-      const uri =  await findUrlInText(rt);
-      if (uri == null) return undefined;
-
-      const ogp = await getOgp(uri);
-      if (ogp == null) return undefined;
-
-      try {
-        // fetchで画像データを取得
-        const imageUrl = ogp['og:image'];
-        // const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(imageUrl)}`);
-
-        const fetchImageUrl = `${Config.API_ENDPOINT}/fetch_image?url=${encodeURIComponent(imageUrl)}`;
-        const res = await fetch(fetchImageUrl);
-
-        const dataURI = await res.text();
-        const [head, image] = dataURI.split(',');
-
-        const parts = head.split(/[:;]/);
-        const imageContentType = parts?.[1] ?? 'image/jpeg';
-
-        // base64文字列をデコード
-        const byteString = atob(image);
-        // デコードされた文字列をUint8Arrayに変換
-        const imageData = new Uint8Array(byteString.length);
-        for (let i = 0; i < byteString.length; i++) {
-          imageData[i] = byteString.charCodeAt(i);
-        }
-        
-        // 画像をアップロードしてIDを取得
-        const uploadedRes = await agent.uploadBlob(imageData, {
-          encoding: imageContentType,
-        });
-
-        // OGP 付きで投稿
-        return {
-          $type: 'app.bsky.embed.external',
-          external: {
-            uri,
-            thumb: {
-              $type: "blob",
-              ref: {
-                $link: uploadedRes.data.blob.ref.toString(),
-              },
-              mimeType: uploadedRes.data.blob.mimeType,
-              size: uploadedRes.data.blob.size,
-            },            
-            title: ogp['og:title'] ?? ' ',
-            description: ogp['og:description'] ?? ' ',
-          }
-        }              
-      } catch (error) {
-        console.error(`embed -> error:`, error);
-        return undefined;
-      }
-    })();
-
-
-    const reply: ReplyRef | undefined = await (async () => {
-      if ((reply_to_id?.length ?? 0) <= 0) {
-        return undefined;
-      }
-
-      const uri = `at://${did}/app.bsky.feed.post/${reply_to_id}`;
-
-      const r = await agent.getPostThread({ uri });
-
-      const th = r?.data?.thread as any;
-      
-      const cid = th?.post?.cid;
-      const parent = { 
-        uri, 
-        cid
-      };
-
-      const root = th?.post?.record?.reply?.root ?? parent;
-
-      return {
-        root,
-        parent
-      }
-    })();
-    
-
-    const postRecord = {
-      $type: 'app.bsky.feed.post',
-      text: rt.text,
-      facets: rt.facets,
-      createdAt: new Date().toISOString(),
-      embed: embedImages ?? embedOgp,
-      reply
-    };
-
-
-    // const res = await agent.getAuthorFeed({ actor: did });
-    // console.log(`FIXME h_oku 後で消す  -> postToBluesky -> res:`, res);
-    
-     
-    const reso = await agent.post(postRecord);       
-    console.log(`FIXME h_oku 後で消す  -> postToBluesky -> reso:`);
-    return true;
+      return true;
+    } else {
+      const errorData = await res.json();
+      console.error('Bluesky post failed:', errorData);
+      return false;
+    }
   } catch (error) {
     console.error(`postToBluesky -> error:`, error);
     return false;
@@ -625,25 +428,10 @@ const uploadImage = async (content: string, filename: string = 'image.png'): Pro
   return await uploadImageToSupabase(content, filename);
 }
 
-const postToTwritter = async (text: string, images: string[], reply_to_id: string): Promise<boolean> => {
+const postToTwritter = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const settings = postSettings.twitter!;
     const token = settings.token_data.token;
-
-    const imgs: string[] = [];
-    for (let i = 0; i < images.length; i++) {
-      const dataURI = images[i];
-      const image = dataURI.split(',')[1];
-      const filename = `image_${i + 1}.png`;
-      const imageUrl = await uploadImage(image, filename);
-      if (imageUrl != null) {
-        imgs.push(imageUrl);
-      } else {
-        // 画像アップロードに失敗した場合は投稿を中止
-        console.error(`Failed to upload image ${i + 1} for Twitter post`);
-        return false;
-      }
-    }
 
     /*
     const images: string[] = [
@@ -655,7 +443,7 @@ const postToTwritter = async (text: string, images: string[], reply_to_id: strin
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ token, text, images: imgs, reply_to_id }),
+      body: JSON.stringify({ token, text, images: imageUrls, reply_to_id }),
     });
 
     if (res.ok) {
