@@ -32,13 +32,19 @@ const handler = async (event) => {
 
     const media_ids = [];
     for (const image of images) {
-     
+      // R2 URLまたはGitHub URLから画像を取得
+      const headers = {};
+      
+      // GitHub URLの場合はトークンを追加
+      if (image.includes('github')) {
+        headers['Authorization'] = `Bearer ${process.env.PPPOST_GITHUB_ACCESS_TOKEN}`;
+      }
+      
       const res = await fetch(image, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${process.env.PPPOST_GITHUB_ACCESS_TOKEN}`,
-        },
+        headers,
       });
+      
       if (res.ok) {
         const buf = await res.arrayBuffer();
 

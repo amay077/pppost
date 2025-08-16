@@ -612,39 +612,29 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-const uploadImage = async (content: string /*file: File*/): Promise<string | null> => {
+const uploadImage = async (content: string, filename: string = 'image.png'): Promise<string | null> => {
+  try {
+    const res = await fetch(`${Config.API_ENDPOINT}/supabase_upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        image: content,
+        filename: filename 
+      }),
+    });
 
-  const conf: { url: string, branch_name: string, token: string } = await (async () => {
-    const r = await fetch(`${Config.API_ENDPOINT}/github_put_url`);
-    if (r.ok) {
-      const resJson = await r.json();
-      return resJson;
+    if (res.ok) {
+      const resJson = await res.json();
+      console.log(`uploadImage to Supabase ~ resJson`, resJson);
+      return resJson.url;
     } else {
+      console.error('Failed to upload image to Supabase:', res.status, res.statusText);
       return null;
     }
-  })();
-
-  const data = {
-    branch: conf.branch_name,
-    message: 'upload image via PPPOST',
-    content: `${content}`
-  };
-
-  const p = {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${conf.token}`,
-    },
-    body: JSON.stringify(data)
-  };
-
-  const res = await fetch(conf.url, p);
-  if (res.ok) {
-    const resJson = await res.json();
-    console.log(`doUpload ~ resJson`, resJson, resJson.content.download_url);
-
-    return resJson.content.download_url;
-  } else {
+  } catch (error) {
+    console.error('Error uploading image to Supabase:', error);
     return null;
   }
 }
@@ -655,9 +645,11 @@ const postToTwritter = async (text: string, images: string[], reply_to_id: strin
     const token = settings.token_data.token;
 
     const imgs: string[] = [];
-    for (const dataURI of images) {
-      const image = dataURI.split(',')[1]
-      const imageUrl = await uploadImage(image);
+    for (let i = 0; i < images.length; i++) {
+      const dataURI = images[i];
+      const image = dataURI.split(',')[1];
+      const filename = `image_${i + 1}.png`;
+      const imageUrl = await uploadImage(image, filename);
       if (imageUrl != null) {
         imgs.push(imageUrl);
       }
