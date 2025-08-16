@@ -3,6 +3,7 @@ import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataTwitter, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
 import { BskyAgent, RichText, type AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
+import { uploadImageToSupabase } from "./supabase-client";
 
 const bskyEndpoint = 'https://bsky.social';
 
@@ -613,30 +614,8 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 const uploadImage = async (content: string, filename: string = 'image.png'): Promise<string | null> => {
-  try {
-    const res = await fetch(`${Config.API_ENDPOINT}/supabase_upload`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        image: content,
-        filename: filename 
-      }),
-    });
-
-    if (res.ok) {
-      const resJson = await res.json();
-      console.log(`uploadImage to Supabase ~ resJson`, resJson);
-      return resJson.url;
-    } else {
-      console.error('Failed to upload image to Supabase:', res.status, res.statusText);
-      return null;
-    }
-  } catch (error) {
-    console.error('Error uploading image to Supabase:', error);
-    return null;
-  }
+  // Supabaseに直接アップロード
+  return await uploadImageToSupabase(content, filename);
 }
 
 const postToTwritter = async (text: string, images: string[], reply_to_id: string): Promise<boolean> => {
