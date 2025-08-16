@@ -207,12 +207,6 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 
 
 
-
-async function url2File(url: string, fileName: string): Promise<File>{
-  const blob = await (await fetch(url)).blob()
-  return new File([blob], fileName, {type: blob.type})
-}
-
 const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
     const settings = postSettings.mastodon!;
@@ -406,22 +400,6 @@ const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: str
   }
 }; 
 
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    console.log('readAsDataURL start', new Date().getTime());
-    reader.readAsDataURL(file);
-    reader.onload = (r) => {
-      console.log('readAsDataURL end', new Date().getTime());
-      console.log('replace start', new Date().getTime());
-      const prefix = `data:${file.type}:base64,`;
-      const base64str = (r.target?.result as string).substring(prefix.length);
-      console.log('replace end', new Date().getTime());
-      resolve(base64str);
-    };
-    reader.onerror = (e) => reject(e);
-  });
-};
 
 const uploadImage = async (content: string, filename: string = 'image.png'): Promise<string | null> => {
   // Supabaseに直接アップロード
