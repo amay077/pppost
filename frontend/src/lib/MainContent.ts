@@ -1,11 +1,8 @@
-import type { ReplyRef } from "@atproto/api/dist/client/types/app/bsky/feed/post";
 import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataTwitter, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
-import { BskyAgent, RichText, type AtpSessionData } from "@atproto/api";
+import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
 import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
-
-const bskyEndpoint = 'https://bsky.social';
 
 export type Post = { text: string, url: string, posted_at: Date };
 export type PresentedPost = {
@@ -249,50 +246,43 @@ const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: st
   }
 };  
 
-// RichTextからURLを取得する
-async function findUrlInText(rt: RichText): Promise<string | null> {
-  if ((rt?.facets?.length ?? 0) < 1) return null;
-  for (const facet of rt?.facets ?? []) {
-    if (facet.features.length < 1) continue;
-    for (const feature of facet.features) {
-      if (feature.$type != "app.bsky.richtext.facet#link") continue;
-      else if (feature.uri == null) continue;
-      return feature.uri as string;
-    }
-  }
-  return null;
-}
 
 const loadMyPostsBluesky = async (): Promise<Post[]> => {
   try {
-    const agent = new BskyAgent({
-      service: bskyEndpoint,
+    const sessionData = postSettings.bluesky?.data?.sessionData;
+    if (!sessionData) {
+      console.error('Bluesky session data not found');
+      return [];
+    }
+
+    const res = await fetch(`${Config.API_ENDPOINT}/bluesky_posts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ sessionData }),
     });
 
-    // resume session
-    const sessionRes = await agent.resumeSession(postSettings.bluesky?.data?.sessionData!);
-    const did = sessionRes?.data?.did;
-
-    // refresh tokens
-    await agent.refreshSession();
-    postSettings.bluesky = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData: agent.session as AtpSessionData } };
-    savePostSetting(postSettings.bluesky);
-
-    const res = await agent.getAuthorFeed({ actor: did });
-
-    return (res?.data?.feed ?? []).map((p) => {
-      const post = p.post;
-      const postid = post.uri.substring(post.uri.lastIndexOf('/') + 1);
-      const url = `https://bsky.app/profile/${post.author.handle}/post/${postid}`;
-
-      const posted_at = (post.record as any)['createdAt'] ?? post.indexedAt;
-
-      const text = `${(post.record as any)['text']}`;
-
-      return { text, url, posted_at };
-    });
+    if (res.ok) {
+      const resJson = await res.json();
+      
+      // 新しいセッションデータを保存
+      if (resJson.sessionData) {
+        postSettings.bluesky = { 
+          type: 'bluesky', 
+          title: 'Bluesky', 
+          enabled: true, 
+          data: { sessionData: resJson.sessionData }
+        };
+        savePostSetting(postSettings.bluesky);
+      }
+      
+      return resJson.posts || [];
+    } else {
+      return [];
+    }
   } catch (error) {
-    console.error(`postToBluesky -> error:`, error);
+    console.error(`loadMyPostsBluesky -> error:`, error);
     return [];
   }
 }; 

@@ -1,13 +1,11 @@
 <script lang="ts">
-  import { BskyAgent } from "@atproto/api";
   import { deletePostSetting, loadPostSetting, savePostSetting } from "./func";
   import { createEventDispatcher } from "svelte";
+  import { Config } from "../config";
 
   const dispatch = createEventDispatcher<{ onChange: void }>();
 
   let expandedBluesky = false;
-
-  let bskyServer = 'https://bsky.social';
 
   let postSettings = loadPostSetting('bluesky');
   let user = postSettings?.data?.sessionData?.email ?? '';
@@ -16,26 +14,35 @@
   const onApplyBSkySettings = async () => {
     console.log(`onApplyBSkySettings -> user:`, user);
 
-    const agent = new BskyAgent({
-      service: bskyServer
-    });
+    try {
+      const res = await fetch(`${Config.API_ENDPOINT}/bluesky_login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          identifier: user,
+          password
+        }),
+      });
 
-    const res = await agent.login({
-      identifier: user,
-      password
-    });
+      if (!res.ok) {
+        const error = await res.json();
+        console.error(`onApplyBSkySettings -> error:`, error);
+        alert('Bluesky に接続できませんでした。');
+        return;
+      }
 
-    if (res.success == false) {
-      console.error(`onApplyBSkySettings -> res:`, res);
+      const data = await res.json();
+      const sessionData = data.sessionData;
+      postSettings = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData } };
+      savePostSetting(postSettings);
+      dispatch('onChange');
+      alert('Bluesky に接続しました。');
+    } catch (error) {
+      console.error(`onApplyBSkySettings -> error:`, error);
       alert('Bluesky に接続できませんでした。');
-      return;
     }
-    
-    const sessionData = res.data;
-    postSettings = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData } };
-    savePostSetting(postSettings);
-    dispatch('onChange');
-    alert('Bluesky に接続しました。');
   };
 </script>
 
