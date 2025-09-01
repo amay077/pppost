@@ -1,5 +1,6 @@
 const fetch = require('node-fetch')
 const fs = require('fs');
+const sharp = require('sharp');
 
 // 復号化関数
 function decrypt(encryptedText) {
@@ -39,10 +40,38 @@ const handler = async (event) => {
       
       if (res.ok) {
         const buf = await res.arrayBuffer();
+        let imageBuffer = Buffer.from(buf);
+
+        // 5MB制限チェック（5,242,880 bytes）
+        const MAX_SIZE = 5242880;
+        if (imageBuffer.length > MAX_SIZE) {
+          console.log(`Image size ${imageBuffer.length} exceeds Twitter limit ${MAX_SIZE}, compressing...`);
+          
+          // 画像メタデータを取得
+          const metadata = await sharp(imageBuffer).metadata();
+          
+          // 目標サイズの90%に圧縮（余裕を持たせる）
+          const targetSize = MAX_SIZE * 0.9;
+          const scaleFactor = Math.sqrt(targetSize / imageBuffer.length);
+          
+          // 新しいサイズを計算
+          const newWidth = Math.floor(metadata.width * scaleFactor);
+          const newHeight = Math.floor(metadata.height * scaleFactor);
+          
+          console.log(`Resizing from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`);
+          
+          // リサイズと圧縮
+          imageBuffer = await sharp(imageBuffer)
+            .resize(newWidth, newHeight, { fit: 'inside' })
+            .jpeg({ quality: 85 })
+            .toBuffer();
+            
+          console.log(`Compressed size: ${imageBuffer.length} bytes`);
+        }
 
         const localPath = `/tmp/${new Date().toISOString()}.data`
 
-        fs.writeFileSync(localPath, Buffer.from(buf));
+        fs.writeFileSync(localPath, imageBuffer);
         const mediaRes = await twitterClient.v1.uploadMedia(localPath);
         media_ids.push(mediaRes);
       }
