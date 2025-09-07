@@ -42,6 +42,34 @@ let replyToPost: PresentedPost = {
 $: tweetLength = twitterText.parseTweet(text).weightedLength / 2; // エクスポートされた名前空間を使用
 const TWITTER_WARN_LENGTH = 140; // 現在のTwitterの文字数上限（警告を出す文字数）
 
+// Swarm URLをスクレイピングして投稿テキストを生成する関数
+const scrapeSwarmCheckin = async (swarmUrl: string) => {
+  try {
+    loading = true;
+    const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
+    
+    // GETリクエストに変更（よりRESTfulで適切）
+    const response = await fetch(`${apiUrl}/foursquare_scrape?url=${encodeURIComponent(swarmUrl)}`);
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success && result.data) {
+        // スクレイピング結果の投稿テキストを設定
+        text = result.data.postText;
+        console.log('Swarm scraping successful:', text);
+      } else {
+        console.error('Swarm scraping failed:', result.error);
+      }
+    } else {
+      console.error('Failed to scrape Swarm URL:', response.status);
+    }
+  } catch (error) {
+    console.error('Error scraping Swarm URL:', error);
+  } finally {
+    loading = false;
+  }
+};
+
 onMount(async () => {
   console.log(`onMount`);
 
@@ -62,6 +90,16 @@ onMount(async () => {
       text = content ?? '';
     } else if ((url?.length ?? 0) > 0) {
       text = url ?? '';
+    }
+
+    // Swarm URLの検出と自動スクレイピング処理（?s=パラメータを含む完全なURLをマッチ）
+    const swarmUrlPattern = /https:\/\/(ja\.)?swarmapp\.com\/user\/\d+\/checkin\/[a-zA-Z0-9]+(\?[^\s]*)?/;
+    const foundSwarmUrl = text.match(swarmUrlPattern);
+    
+    if (foundSwarmUrl) {
+      console.log('Swarm URL detected:', foundSwarmUrl[0]);
+      // Swarm URLをスクレイピングして投稿テキストを生成
+      await scrapeSwarmCheckin(foundSwarmUrl[0]);
     }
 
   } finally {
