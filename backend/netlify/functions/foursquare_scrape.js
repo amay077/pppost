@@ -87,6 +87,7 @@ const handler = async (event) => {
     // ページ内から追加情報を取得
     let shout = '';
     let checkinTime = '';
+    let checkinTimestamp = null;
     
     // コメント（shout）を探す - 複数のセレクタを試す
     const shoutSelectors = [
@@ -105,8 +106,12 @@ const handler = async (event) => {
       }
     }
     
-    // チェックイン時刻を探す
+    // チェックイン時刻を探す（data-created-at属性も取得）
+    // より具体的なセレクタを追加
     const timeSelectors = [
+      '.timestamp.autoupdate[data-created-at]',  // data-created-at属性を持つtimestamp要素を直接指定
+      '.timestamp[data-created-at]',
+      '.timestamp',
       '.time',
       '.date',
       'time',
@@ -118,7 +123,27 @@ const handler = async (event) => {
       const timeElement = $(selector).first();
       if (timeElement.length > 0) {
         checkinTime = timeElement.text().trim();
+        
+        // data-created-at属性からUNIXタイムスタンプを取得
+        const timestamp = timeElement.attr('data-created-at');
+        if (timestamp) {
+          checkinTimestamp = parseInt(timestamp);
+          console.log('Found timestamp:', timestamp);
+        }
         break;
+      }
+    }
+    
+    // チェックイン時刻に基づいてI'm at/I was atを決定
+    let atPhrase = "I'm at";
+    if (checkinTimestamp) {
+      const now = Math.floor(Date.now() / 1000); // 現在のUNIXタイムスタンプ
+      const diffSeconds = now - checkinTimestamp;
+      const diffHours = diffSeconds / 3600;
+      
+      // 3時間以上経過していたら"I was at"を使用
+      if (diffHours >= 3) {
+        atPhrase = "I was at";
       }
     }
     
@@ -128,7 +153,7 @@ const handler = async (event) => {
       ? `${locationParts[0]}, ${locationParts[1]}` 
       : locationParts[0] || '';
     
-    const postText = `${shoutPrefix}I'm at ${venueName} in ${location} ${url}`;
+    const postText = `${shoutPrefix}${atPhrase} ${venueName} in ${location} ${url}`;
     
     // レスポンスデータの構築
     const result = {
@@ -141,6 +166,7 @@ const handler = async (event) => {
         country: locationParts[2] || 'Japan',
         shout: shout,
         checkinTime: checkinTime,
+        checkinTimestamp: checkinTimestamp,
         checkinUrl: url,
         ogImage: ogImage,
         postText: postText,
