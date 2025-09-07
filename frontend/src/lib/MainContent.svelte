@@ -92,12 +92,15 @@ onMount(async () => {
       text = url ?? '';
     }
 
-    // Swarm URLの検出と自動スクレイピング処理（?s=パラメータを含む完全なURLをマッチ）
-    const swarmUrlPattern = /https:\/\/(ja\.)?swarmapp\.com\/user\/\d+\/checkin\/[a-zA-Z0-9]+(\?[^\s]*)?/;
+    // Swarm URLの検出と自動スクレイピング処理
+    // 日本語テキスト内のURLも検出（〜や、で終わる場合を考慮）
+    const swarmUrlPattern = /https:\/\/(ja\.)?swarmapp\.com\/user\/\d+\/checkin\/[a-zA-Z0-9]+(\?[^\s、〜～]*)?/;
     const foundSwarmUrl = text.match(swarmUrlPattern);
     
     if (foundSwarmUrl) {
       console.log('Swarm URL detected:', foundSwarmUrl[0]);
+      console.log('Original text:', text);
+      
       // Swarm URLをスクレイピングして投稿テキストを生成
       await scrapeSwarmCheckin(foundSwarmUrl[0]);
     }
