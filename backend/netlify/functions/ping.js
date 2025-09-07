@@ -1,7 +1,7 @@
 const handler = async (event) => {
   return {
     statusCode: 200,
-    body: `Pong at  ${new Date().toISOString()}`
+    body: `Ponged at  ${new Date().toISOString()}`
   }
 }
 
