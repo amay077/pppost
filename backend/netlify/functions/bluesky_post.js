@@ -16,6 +16,46 @@ function decrypt(encryptedText) {
   return decrypted;
 }
 
+// 画像リサイズ共通関数
+async function resizeImageIfNeeded(imageBuffer, maxSize, context = 'Image') {
+  if (imageBuffer.length <= maxSize) {
+    return {
+      buffer: imageBuffer,
+      contentType: null, // 変更なし
+      resized: false
+    };
+  }
+
+  console.log(`${context} is too large (${imageBuffer.length} bytes), resizing to fit ${maxSize} bytes...`);
+  
+  const metadata = await sharp(imageBuffer).metadata();
+  const scaleFactor = Math.sqrt(maxSize / imageBuffer.length) * 0.9; // 90%のサイズにして確実に制限以下にする
+  
+  const resizeOptions = {
+    width: Math.floor(metadata.width * scaleFactor),
+    height: Math.floor(metadata.height * scaleFactor),
+    fit: 'inside',
+    withoutEnlargement: true
+  };
+
+  const resizedBuffer = await sharp(imageBuffer)
+    .resize(resizeOptions)
+    .jpeg({ quality: 80 }) // JPEGに変換して品質を下げる
+    .toBuffer();
+  
+  console.log(`Resized ${context} to ${resizedBuffer.length} bytes`);
+  
+  return {
+    buffer: resizedBuffer,
+    contentType: 'image/jpeg',
+    resized: true,
+    aspectRatio: {
+      width: resizeOptions.width,
+      height: resizeOptions.height
+    }
+  };
+}
+
 const handler = async (event) => {
   // CORS対応
   if (event.httpMethod === 'OPTIONS') {
@@ -47,7 +87,7 @@ const handler = async (event) => {
     await agent.refreshSession();
 
     // 画像処理
-    const MAX_SIZE = 1000000; // 1MB
+    const MAX_SIZE = 976560; // 976.56KB (Blueskyの実際の制限)
     const embedImages = await (async () => {
       if (!images || images.length === 0) {
         return undefined;
@@ -67,45 +107,24 @@ const handler = async (event) => {
             return null;
           }
 
-          let imageBuffer = await imageRes.buffer();
+          const originalBuffer = await imageRes.buffer();
           let contentType = imageRes.headers.get('content-type') || 'image/jpeg';
 
-          // 画像のメタデータを取得（サイズチェックの前に）
-          const metadata = await sharp(imageBuffer).metadata();
-          const aspectRatio = {
+          // 画像のメタデータを取得
+          const metadata = await sharp(originalBuffer).metadata();
+          let aspectRatio = {
             width: metadata.width || 1,
             height: metadata.height || 1
           };
           console.log(`Image metadata: ${metadata.width}x${metadata.height}`);
 
-          // 画像サイズをチェック
-          if (imageBuffer.length > MAX_SIZE) {
-            console.log(`Image ${i + 1} is too large (${imageBuffer.length} bytes), resizing...`);
-            
-            let resizeOptions = {};
-            
-            // アスペクト比を維持しながらリサイズ
-            const scaleFactor = Math.sqrt(MAX_SIZE / imageBuffer.length) * 0.9; // 90%のサイズにして確実に1MB以下にする
-            
-            if (metadata.width && metadata.height) {
-              resizeOptions = {
-                width: Math.floor(metadata.width * scaleFactor),
-                height: Math.floor(metadata.height * scaleFactor),
-                fit: 'inside',
-                withoutEnlargement: true
-              };
-              // リサイズ後のアスペクト比を更新
-              aspectRatio.width = resizeOptions.width;
-              aspectRatio.height = resizeOptions.height;
-            }
-
-            imageBuffer = await sharp(imageBuffer)
-              .resize(resizeOptions)
-              .jpeg({ quality: 85 }) // JPEGに変換して品質を下げる
-              .toBuffer();
-            
-            contentType = 'image/jpeg';
-            console.log(`Resized image to ${imageBuffer.length} bytes`);
+          // 画像リサイズ処理（共通関数を使用）
+          const resizeResult = await resizeImageIfNeeded(originalBuffer, MAX_SIZE, `Image ${i + 1}`);
+          const imageBuffer = resizeResult.buffer;
+          
+          if (resizeResult.resized) {
+            contentType = resizeResult.contentType;
+            aspectRatio = resizeResult.aspectRatio;
           }
 
           // Blueskyにアップロード
@@ -206,12 +225,18 @@ const handler = async (event) => {
         const imageContentType = parts[1] || 'image/jpeg';
 
         // base64文字列をデコード
-        const imageBuffer = Buffer.from(image, 'base64');
+        const originalBuffer = Buffer.from(image, 'base64');
+
+        // OGP画像のリサイズ処理（共通関数を使用）
+        const OGP_MAX_SIZE = 976560; // 976.56KB (Blueskyの制限)
+        const resizeResult = await resizeImageIfNeeded(originalBuffer, OGP_MAX_SIZE, 'OGP image');
+        const imageBuffer = resizeResult.buffer;
+        const imageEncoding = resizeResult.resized ? 'image/jpeg' : imageContentType;
 
         // 画像をアップロード
         const { data: uploadResult } = await agent.uploadBlob(
           imageBuffer,
-          { encoding: imageContentType }
+          { encoding: imageEncoding }
         );
 
         // OGP埋め込みオブジェクトを返す
