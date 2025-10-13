@@ -12,6 +12,12 @@ PPPOST は、Twitter/X・Bluesky・Mastodon に一つの画面から同時投稿
 1. 各 SNS への接続設定を完了する
 2. 投稿内容を入力して「Post」を実行する
 
+### URL 起動時のクエリパラメータ
+
+- `text` : 起動時に投稿本文へ即反映される。改行や記号はクエリ文字列としてエンコードして指定する。
+- `url` : `text` が未指定の場合に投稿本文へ反映される。
+- Swarm 対応：どちらかでセットされた本文内に `https://swarmapp.com/.../checkin/...` 形式の URL が含まれると、自動でスクレイピング API を呼び出し、取得したチェックイン内容で本文を置き換える。
+
 ## アーキテクチャ
 
 - `/frontend` : TypeScript・Vite・PWA サポートを備えた Svelte 4 の SPA
