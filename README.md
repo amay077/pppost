@@ -51,12 +51,8 @@ npm run dev         # Netlify Functions を http://localhost:9000 で起動
 
 ## 主要な実装パターン
 
-- 新しいソーシャルプラットフォーム追加手順
-  1. `/backend/netlify/functions/[platform]_auth.js` に認証フローを定義
-  2. `/backend/netlify/functions/[platform]_token.js` にトークン管理を追加
-  3. `/backend/netlify/functions/[platform]_post.js` に投稿エンドポイントを実装
-  4. `/frontend/src/components/` にプラットフォーム固有コンポーネントを配置
-  5. `/frontend/src/App.svelte` のメイン投稿ロジックを更新
+- 新しいソーシャルプラットフォーム追加  
+  現時点では共通化された手順が確立されていないため、既存の Mastodon/Bluesky/Twitter 実装を参考に個別対応してください。
 - サーバーレス関数の基本形
 
 ```javascript
@@ -68,15 +64,15 @@ exports.handler = async (event, context) => {
 ```
 
 - フロントエンド状態管理
-  - 認証トークンはローカルストレージに暗号化して保存
-  - リアクティブな状態は Svelte ストアで管理
+  - 認証トークンはローカルストレージに保存しており、現状は平文 JSON で保持される
+  - 状態はコンポーネント内のリアクティブ変数で管理
   - プラットフォーム固有の設定は別モジュールへ分離
 
 ## セキュリティ
 
-- トークン保存時は crypto-js で暗号化
+- アカウント設定はローカルストレージに平文 JSON で保存されるため、端末共有や XSS に対して漏洩リスクがある。暗号化対応が今後の課題。
 - API キーやシークレットは環境変数で管理
-- クロスオリジン対策として `/backend/netlify/functions/cors.js` を利用
+- クロスオリジン対策として `/backend/netlify/functions/cors_proxy.js` を利用
 
 ## テスト
 
@@ -91,8 +87,8 @@ exports.handler = async (event, context) => {
 ## 現在の制限事項
 
 1. Misskey への投稿は未対応（検討余地あり）
-2. 画像付き投稿は未サポート
-3. Bluesky の OGP 対応なし
+2. ローカルストレージに保存した接続情報が平文のまま保持される（暗号化未対応）
+3. Mastodon 以外のサーバーへの認証情報テンプレートが未整備（環境変数を追加すれば拡張可能）
 
 ## License
 
