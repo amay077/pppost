@@ -43,7 +43,8 @@ $: tweetLength = twitterText.parseTweet(text).weightedLength / 2; // エクス�
 const TWITTER_WARN_LENGTH = 140; // 現在のTwitterの文字数上限（警告を出す文字数）
 
 // Swarm URLをスクレイピングして投稿テキストを生成する関数
-const scrapeSwarmCheckin = async (swarmUrl: string) => {
+const scrapeSwarmCheckin = async (swarmUrl: string): Promise<boolean> => {
+  let handled = false;
   try {
     loading = true;
     const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
@@ -57,6 +58,7 @@ const scrapeSwarmCheckin = async (swarmUrl: string) => {
         // スクレイピング結果の投稿テキストを設定
         text = result.data.postText;
         console.log('Swarm scraping successful:', text);
+        handled = true;
       } else {
         console.error('Swarm scraping failed:', result.error);
       }
@@ -68,6 +70,55 @@ const scrapeSwarmCheckin = async (swarmUrl: string) => {
   } finally {
     loading = false;
   }
+
+  return handled;
+};
+
+const extractUrlOnly = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const sanitized = trimmed.replace(/[、。，．。,.．〜～\s]+$/gu, '');
+  if (/^https?:\/\/\S+$/i.test(sanitized)) {
+    return sanitized;
+  }
+
+  return null;
+};
+
+const fetchTitleForUrl = async (targetUrl: string): Promise<string | null> => {
+  const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
+
+  try {
+    loading = true;
+    const response = await fetch(`${apiUrl}/fetch_title?url=${encodeURIComponent(targetUrl)}`);
+
+    if (!response.ok) {
+      console.warn('Failed to fetch title:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    if (result.success && typeof result.title === 'string' && result.title.trim().length > 0) {
+      return result.title.trim();
+    }
+
+    if (result.error) {
+      console.warn('Title API responded with error:', result.error);
+    }
+  } catch (error) {
+    console.error('Error fetching title for URL:', error);
+  } finally {
+    loading = false;
+  }
+
+  return null;
 };
 
 onMount(async () => {
@@ -85,24 +136,39 @@ onMount(async () => {
 
     const content = urlParams.get('text');
     const url = urlParams.get('url');
+    let queryValueUsed: string | null = null;
 
     if ((content?.length ?? 0) > 0) {
       text = content ?? '';
+      queryValueUsed = content ?? '';
     } else if ((url?.length ?? 0) > 0) {
       text = url ?? '';
+      queryValueUsed = url ?? '';
     }
 
     // Swarm URLの検出と自動スクレイピング処理
     // 日本語テキスト内のURLも検出（〜や、で終わる場合を考慮）
     const swarmUrlPattern = /https:\/\/(ja\.)?swarmapp\.com\/user\/\d+\/checkin\/[a-zA-Z0-9]+(\?[^\s、〜～]*)?/;
     const foundSwarmUrl = text.match(swarmUrlPattern);
+    let swarmHandled = false;
     
     if (foundSwarmUrl) {
       console.log('Swarm URL detected:', foundSwarmUrl[0]);
       console.log('Original text:', text);
       
       // Swarm URLをスクレイピングして投稿テキストを生成
-      await scrapeSwarmCheckin(foundSwarmUrl[0]);
+      swarmHandled = await scrapeSwarmCheckin(foundSwarmUrl[0]);
+    }
+
+    if (!swarmHandled && queryValueUsed) {
+      const plainUrl = extractUrlOnly(queryValueUsed);
+      if (plainUrl) {
+        const title = await fetchTitleForUrl(plainUrl);
+        if (title) {
+          text = `${title} - ${plainUrl}`;
+          console.log('Title fetched for URL:', text);
+        }
+      }
     }
 
   } finally {
