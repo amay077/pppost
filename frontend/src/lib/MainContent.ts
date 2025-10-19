@@ -94,11 +94,16 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
   }
 
   /**
-   * テキストを正規化してグループ化用のキーを生成する
+   * テキストを正規化する（URLやHTMLタグ、エンティティ、空白を除去・統一）
    */
-  const normalizeTextForGrouping = (text: string): string => {
-    // URL を除去
-    let normalized = text.replace(/https?:\/\/[^\s]+/g, '');
+  const normalizeText = (text: string): string => {
+    // URL を除去（プロトコル付き）
+    // RFC3986に基づく URL 文字セットを使用し、日本語文字の直前で停止
+    let normalized = text.replace(/https?:\/\/[a-zA-Z0-9\/?#\[\]@!$&'()*+,;=:._~%-]+/g, '');
+
+    // URL を除去（プロトコルなし: example.com/path や example.com?query など）
+    // ドメイン名パターンで、句読点以外で終わるものを除去
+    normalized = normalized.replace(/\b[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}[\/a-zA-Z0-9?#\[\]@!$&'()*+,;=:._~%-]*[^\s。、！？,.!?]/g, '');
 
     // HTML タグを除去
     normalized = normalized.replace(/<[^>]+>/g, '');
@@ -122,16 +127,20 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
     // 前後の空白を削除
     normalized = normalized.trim();
 
-    // テキストの50%を返す（最低でも10文字、最大100文字）
-    const halfLength = Math.max(10, Math.min(100, Math.floor(normalized.length * 0.5)));
-    return normalized.substring(0, halfLength);
+    return normalized;
   };
 
   const groupByText = (input: { type: SettingType, post: Post }[]): PresentedPost[] => {
+    // 1パス目: すべての投稿を正規化して最短文字列長を計算
+    const normalizedTexts = input.map(({ post }) => normalizeText(post.text));
+    const minLength = Math.min(...normalizedTexts.map(n => n.length));
+    const compareLength = Math.max(10, Math.min(100, Math.floor(minLength * 0.6)));
+
+    // 2パス目: グループ化
     const grouped: { [key: string]: PresentedPost } = {};
 
-    input.forEach(({ type, post }) => {
-      const key = normalizeTextForGrouping(post.text);
+    input.forEach(({ type, post }, index) => {
+      const key = normalizedTexts[index].substring(0, compareLength);
       if (!grouped[key]) {
         grouped[key] = {
           display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
