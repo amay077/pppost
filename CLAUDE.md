@@ -1,3 +1,22 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
 # AGENTS.md / CLAUDE.md - AIエージェント指示書
 
 ※このドキュメントの内容は `AGENTS.md` と `CLAUDE.md` で常に一致させること。更新時は必ず両方を同時に修正する。
@@ -103,20 +122,31 @@ osascript -e 'display notification "具体的な作業内容が完了しまし�
 - 単純な質疑応答、継続中の対話、部分的な進捗報告
 
 ## 対話ログ記録ルール
-- **エージェントの作業が終了したら最後に** `.agents_logs/{YYYYMMDD}.md` へ、「ユーザーの指示」、「エージェントの対応」を記入すること。
-- {YYYYMMDD} および、対話ログ内の日時表記は、原則として JST とする。
+- **エージェントの応答が完了したら毎回** `.agents_logs/{YYYYMMDD}.md` へ、「ユーザーの指示」、「エージェントの対応」を記入すること。
+- {YYYYMMDD} および、対話ログ内の日時表記は、原則として JST（日本標準時）とする。
 - 各ターンの完了前に「ログ追記済みか」を必ず自己チェックし、未実施なら直ちに記録すること。
 - 記録漏れが判明した場合は、すぐにユーザーへ報告し、その場で不足分を補記すること。
 
-対話ログの書式は次の通りとする
+### 対話ログの時刻と所要時間の記録方法
+
+1. **対話開始時**: 以下のいずれかのコマンドで JST 時刻を取得
+   - macOS/Linux: `TZ='Asia/Tokyo' date '+%Y/%m/%d %H:%M:%S'`
+   - Node.js（クロスプラットフォーム）: `node -e "const d = new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Tokyo'})); const pad = n => String(n).padStart(2, '0'); console.log(\`\${d.getFullYear()}/\${pad(d.getMonth()+1)}/\${pad(d.getDate())} \${pad(d.getHours())}:\${pad(d.getMinutes())}:\${pad(d.getSeconds())}\`)"`
+2. **対話終了時**: 再度同じコマンドで JST 時刻を取得し、開始時刻との差分から所要時間を計算
+3. **所要時間の表記**: 
+   - 60秒未満: `（所要時間:XX秒）`
+   - 60秒以上: `（所要時間:XX分XX秒）` または `（所要時間:XX分）`
+4. **時刻の表記**: `## YYYY/MM/DD HH:MM:SS JST` の形式で JST を明記
+
+### 対話ログの書式
 
 ```
-## YYYY/MM/DD HH:mm:ss
+## YYYY/MM/DD HH:MM:SS JST
 - ユーザーの指示
     1. ユーザーの指示内容(簡潔に)1
     2. ユーザーの指示内容(簡潔に)2
     3. ユーザーの指示内容(簡潔に)3...
-- エージェントの対応（所要時間:◯秒または◯分） by {AIエージェント名}
+- エージェントの対応（所要時間:XX秒） by {AIエージェント名}
     1. エージェントの対応内容(簡潔に)1
     2. エージェントの対応内容(簡潔に)2
     3. エージェントの対応内容(簡潔に)3...

@@ -93,21 +93,55 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
     }
   }
 
+  /**
+   * テキストを正規化してグループ化用のキーを生成する
+   */
+  const normalizeTextForGrouping = (text: string): string => {
+    // URL を除去
+    let normalized = text.replace(/https?:\/\/[^\s]+/g, '');
+
+    // HTML タグを除去
+    normalized = normalized.replace(/<[^>]+>/g, '');
+
+    // HTML エンティティをデコード
+    const htmlEntities: { [key: string]: string } = {
+      '&nbsp;': ' ',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&apos;': "'",
+      '&amp;': '&'
+    };
+    for (const [entity, char] of Object.entries(htmlEntities)) {
+      normalized = normalized.replace(new RegExp(entity, 'g'), char);
+    }
+
+    // 連続する空白文字を1つに統一
+    normalized = normalized.replace(/\s+/g, ' ');
+
+    // 前後の空白を削除
+    normalized = normalized.trim();
+
+    // テキストの50%を返す（最低でも10文字、最大100文字）
+    const halfLength = Math.max(10, Math.min(100, Math.floor(normalized.length * 0.5)));
+    return normalized.substring(0, halfLength);
+  };
+
   const groupByText = (input: { type: SettingType, post: Post }[]): PresentedPost[] => {
     const grouped: { [key: string]: PresentedPost } = {};
-  
+
     input.forEach(({ type, post }) => {
-      const key = post.text.substring(0, 10);
+      const key = normalizeTextForGrouping(post.text);
       if (!grouped[key]) {
         grouped[key] = {
-          display_posted_at: dayjs(post.posted_at).format('M/DD H:MM'),
+          display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
           trimmed_text: trimText(post.text),
           postOfType: { mastodon: undefined, twitter: undefined, bluesky: undefined }
         };
       }
       grouped[key].postOfType[type] = post;
     });
-  
+
     return Object.values(grouped);
   }
   
@@ -118,7 +152,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
 
   return succeededPosts.map((p) => {
     return {
-      display_posted_at: dayjs(p.post.posted_at).format('M/DD H:MM'),
+      display_posted_at: dayjs(p.post.posted_at).format('M/DD H:mm'),
       trimmed_text: trimText(p.post.text),
       postOfType: {
         mastodon: p.type == 'mastodon' ? p.post : undefined,
