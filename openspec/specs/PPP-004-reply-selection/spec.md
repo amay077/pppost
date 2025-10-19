@@ -1,7 +1,7 @@
 # PPP-004-reply-selection Specification
 
 ## Purpose
-TBD - created by archiving change PPP-003-fix-reply-grouping. Update Purpose after archive.
+リプライ元選択ドロップダウンにおいて、同一内容の投稿を複数の SNS（X、Mastodon、Bluesky）にまたがって適切にグループ化し、ユーザーが同じ投稿を重複して選択する必要をなくす。テキストの正規化により、URL や HTML タグ、空白の違いを吸収し、本文の内容が同一であれば1つのグループとして表示する。これにより、リプライ投稿時の UX を向上させる。
 ## Requirements
 ### Requirement: 投稿の内容別グループ化
 
