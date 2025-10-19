@@ -49,6 +49,13 @@ const handler = async (event) => {
       const dom = new JSDOM(htmlString);
       const document = dom.window.document;
 
+      // <br> タグを改行文字に変換（textContent 取得前に実行）
+      const brElements = document.querySelectorAll('br');
+      brElements.forEach(br => {
+        const textNode = document.createTextNode('\n');
+        br.parentNode.replaceChild(textNode, br);
+      });
+
       // <p>要素のテキストコンテンツを取得
       const pElement = document.querySelector('p');
       return pElement ? pElement.textContent : '';
