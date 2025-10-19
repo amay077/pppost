@@ -35,6 +35,51 @@ PPPOST は、Twitter/X・Bluesky・Mastodon に一つの画面から同時投稿
 - コミット時はチケット番号を接頭辞に付与（例: PPP-1234 ○○を修正）
 - 過去のコミットを書き換える操作は禁止し、常に通常の `git commit` を使用
 
+### OpenSpec Naming Conventions
+
+本プロジェクトでは、proposal と spec の両方にチケット番号を付与し、課題管理システムで親子関係を管理する。
+
+#### Change ID (Proposal ID)
+
+- **形式**: `{PROJECT_KEY}-{TASK_ID}-{descriptive-name}`
+- **例**: `PPP-005-add-threads-support`
+- **PROJECT_KEY**: プロジェクト識別子（本プロジェクトは `PPP`）
+- **TASK_ID**: タスク番号（3桁以上の数値、例: 005）
+- **descriptive-name**: kebab-case の説明的な名前（動詞で始めることを推奨: `add-`, `fix-`, `update-`, `remove-` など）
+
+この命名により、以下が実現される：
+- Proposal ID として `PPP-005` 部分が識別子として機能
+- change-id として `PPP-005-add-threads-support` 全体が使用可能
+- Git コミットメッセージ（`PPP-005 変更内容`）との整合性維持
+- ディレクトリ一覧で ID と内容の両方が把握可能
+
+#### Spec Directory Name
+
+Spec ディレクトリにも**proposal とは異なるチケット番号**を付与する：
+
+- **形式**: `{PROJECT_KEY}-{TASK_ID}-{descriptive-name}`
+- **例**: `PPP-006-threads-ui`, `PPP-008-threads-api`
+- **親子関係**: 課題管理システムで proposal を親、spec を子として管理
+
+**構造例:**
+```
+openspec/changes/PPP-005-add-threads-support/  ← proposal (親)
+├── proposal.md
+├── tasks.md
+└── specs/
+    ├── PPP-006-threads-ui/      ← spec1 (子)
+    │   └── spec.md
+    ├── PPP-008-threads-api/     ← spec2 (子)
+    │   └── spec.md
+    └── PPP-010-threads-notification/  ← spec3 (子)
+        └── spec.md
+```
+
+**メリット:**
+- proposal と spec の両方を課題管理システムで追跡可能
+- 親子関係により依存関係が明確
+- 各 spec に独立したチケット番号を割り当てることで、個別に進捗管理が可能
+
 ### OpenSpec Language Convention
 
 本プロジェクトでは、OpenSpec の仕様ファイルにおいて以下の言語慣例を採用する：
