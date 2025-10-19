@@ -49,10 +49,20 @@ openspec/changes/ABC-005-add-user-authentication/  ← proposal (親)
 
 ## OpenSpec Language Convention
 
-多言語プロジェクトでは、見出しを英語と他言語で併記する慣例を採用できます：
+多言語プロジェクトでは、以下の言語規約を採用できます：
 
-- **見出しは英語と日本語の併記例**: `#### Scenario: User login success（ユーザーログイン成功）`
+### Proposal Files
+
+- **セクション名は英語のみ**: `## Why`, `## What Changes`, `## Impact`
+  - OpenSpec パーサーの要件により、proposal のセクション名は英語必須
+- **タイトルは任意の言語**: `# ユーザー認証機能の追加` または `# Add User Authentication`
+- **本文は任意の言語**: プロジェクトの主要言語で記述可能
+
+### Spec Files
+
+- **見出しは英語と他言語の併記可能**: `#### Scenario: User login success（ユーザーログイン成功）`
   - 英語見出しで OpenSpec ツールとの互換性を維持
   - 括弧内の他言語で母語話者の理解を容易にする
-- **本文の言語**: プロジェクトの主要言語で記述
+- **または英語のみ・他言語のみも可**: プロジェクトの方針による
+- **本文は任意の言語**: プロジェクトの主要言語で記述可能
 - **Requirement 見出しにも適用**: `### Requirement: User Authentication（ユーザー認証）`

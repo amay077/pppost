@@ -105,6 +105,12 @@ openspec/changes/PPP-005-add-threads-support/  ← proposal (親)
 
 #### 言語慣例
 
+**Proposal ファイル:**
+- **セクション名は英語のみ**: `## Why`, `## What Changes`, `## Impact`（OpenSpec パーサー要件）
+- **タイトルは日本語**: `# リプライ選択グループ化の修正`
+- **本文は日本語**: 背景説明、変更内容、影響範囲などは日本語で記述
+
+**Spec ファイル:**
 - **見出しは英語と日本語の併記**: `#### Scenario: Same content posted to multiple SNS（同じ内容を複数 SNS に投稿）`
   - 英語見出しで OpenSpec ツールとの互換性を維持
   - 括弧内の日本語で日本語話者の理解を容易にする
