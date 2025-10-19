@@ -70,6 +70,41 @@ npm run dev         # Netlify Functions を http://localhost:9000 で起動
 
 ### 本プロジェクトの OpenSpec 慣例
 
+#### プロジェクト固有情報
+
+- **PROJECT_KEY**: `PPP` (PPPOST の略)
+- **コミットメッセージ**: 日本語、チケット番号を接頭辞に付与（例: `PPP-003 リプライ選択グループ化を修正`）
+- **Git ワークフロー**: 過去のコミットを書き換える操作は禁止し、常に通常の `git commit` を使用
+
+#### 命名規則
+
+本プロジェクトでは、proposal と spec の両方にチケット番号を付与し、課題管理システムで親子関係を管理します。
+
+**Change ID (Proposal ID):**
+- 形式: `PPP-{TASK_ID}-{descriptive-name}`
+- 例: `PPP-005-add-threads-support`
+
+**Spec Directory Name:**
+- 形式: `PPP-{TASK_ID}-{descriptive-name}`
+- 例: `PPP-006-threads-ui`, `PPP-008-threads-api`
+- proposal とは異なるチケット番号を使用
+
+**構造例:**
+```
+openspec/changes/PPP-005-add-threads-support/  ← proposal (親)
+├── proposal.md
+├── tasks.md
+└── specs/
+    ├── PPP-006-threads-ui/      ← spec1 (子)
+    │   └── spec.md
+    ├── PPP-008-threads-api/     ← spec2 (子)
+    │   └── spec.md
+    └── PPP-010-threads-notification/  ← spec3 (子)
+        └── spec.md
+```
+
+#### 言語慣例
+
 - **見出しは英語と日本語の併記**: `#### Scenario: Same content posted to multiple SNS（同じ内容を複数 SNS に投稿）`
   - 英語見出しで OpenSpec ツールとの互換性を維持
   - 括弧内の日本語で日本語話者の理解を容易にする
