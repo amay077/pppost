@@ -141,6 +141,38 @@ openspec/
 │   └── archive/            # Completed changes
 ```
 
+## Spec Maintenance Rules
+
+### Naming Conventions
+- **Spec directories**: Use kebab-case without issue key prefixes (e.g., `user-auth`, NOT `PROJ-123_user-auth`)
+- **Change directories**: May include issue key prefixes (e.g., `PROJ-123_add-user-auth`)
+- **Archive directories**: Include date prefix (e.g., `2025-01-15-PROJ-123_add-user-auth`)
+
+### Spec Index (`specs/index.md`)
+Maintain a central listing of all specifications:
+```markdown
+# 仕様一覧
+
+| ディレクトリ | 仕様名 | 分類 | 作成日 | 更新日 |
+|---|---|---|---|---|
+| [capability-name](./capability-name/spec.md) | 日本語名 | 分類 | YYYY-MM-DD | YYYY-MM-DD |
+```
+
+Update after archiving:
+- Add new specs to the table
+- Update "更新日" for modified specs
+- Use `git log --follow --format="%ai" -- <path> | tail -1` for creation date
+- Use `git log -1 --format="%ai" -- <path>` for update date
+
+### Related Changes Section
+Each `spec.md` should have a `## Related Changes` section at the end linking to archived proposals:
+```markdown
+## Related Changes
+- [archive-dir-name](../../changes/archive/archive-dir-name/proposal.md)
+```
+
+This provides traceability from current specs back to the changes that created or modified them.
+
 ## Creating Change Proposals
 
 ### Decision Tree
