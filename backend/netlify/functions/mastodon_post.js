@@ -1,5 +1,6 @@
 const fetch = require('node-fetch')
 const fs = require('fs');
+const sharp = require('sharp');
 
 // 復号化関数
 function decrypt(encryptedText) {
@@ -57,15 +58,49 @@ const handler = async (event) => {
             };
           }
           
-          const imageBuffer = await imageRes.buffer();
+          let imageBuffer = await imageRes.buffer();
+          const originalContentType = imageRes.headers.get('content-type') || 'image/png';
+          const ext = originalContentType.split('/')[1] || 'png';
+          let fileOptions = {
+            filename: `image.${ext}`,
+            contentType: originalContentType
+          };
+
+          // 5MB制限チェック（5,242,880 bytes）
+          const MAX_SIZE = 5242880;
+          if (imageBuffer.length > MAX_SIZE) {
+            console.log(`Image size ${imageBuffer.length} exceeds Mastodon limit ${MAX_SIZE}, compressing...`);
+
+            // 画像メタデータを取得
+            const metadata = await sharp(imageBuffer).metadata();
+
+            // 目標サイズの90%に圧縮（余裕を持たせる）
+            const targetSize = MAX_SIZE * 0.9;
+            const scaleFactor = Math.sqrt(targetSize / imageBuffer.length);
+
+            // 新しいサイズを計算
+            const newWidth = Math.max(1, Math.floor(metadata.width * scaleFactor));
+            const newHeight = Math.max(1, Math.floor(metadata.height * scaleFactor));
+
+            console.log(`Resizing from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`);
+
+            // リサイズと圧縮
+            imageBuffer = await sharp(imageBuffer)
+              .resize(newWidth, newHeight, { fit: 'inside' })
+              .jpeg({ quality: 85 })
+              .toBuffer();
+
+            console.log(`Compressed size: ${imageBuffer.length} bytes`);
+            fileOptions = {
+              filename: 'image.jpg',
+              contentType: 'image/jpeg'
+            };
+          }
           
           // FormDataを作成
           const FormData = require('form-data');
           const formData = new FormData();
-          formData.append('file', imageBuffer, {
-            filename: 'image.png',
-            contentType: 'image/png'
-          });
+          formData.append('file', imageBuffer, fileOptions);
           
           // Mastodon APIに画像をアップロード
           const uploadRes = await fetch(`https://${host}/api/v1/media`, {
