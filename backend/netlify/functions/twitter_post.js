@@ -1,5 +1,4 @@
 const fetch = require('node-fetch')
-const fs = require('fs');
 const sharp = require('sharp');
 
 // 復号化関数
@@ -31,50 +30,54 @@ const handler = async (event) => {
       accessSecret, 
     });
 
+    const UPLOAD_DELAY_MS = 500;
     const media_ids = [];
-    for (const image of images) {
-      // Supabase URLから画像を取得
-      const res = await fetch(image, {
-        method: 'GET',
-      });
-      
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        let imageBuffer = Buffer.from(buf);
-
-        // 5MB制限チェック（5,242,880 bytes）
-        const MAX_SIZE = 5242880;
-        if (imageBuffer.length > MAX_SIZE) {
-          console.log(`Image size ${imageBuffer.length} exceeds Twitter limit ${MAX_SIZE}, compressing...`);
-          
-          // 画像メタデータを取得
-          const metadata = await sharp(imageBuffer).metadata();
-          
-          // 目標サイズの90%に圧縮（余裕を持たせる）
-          const targetSize = MAX_SIZE * 0.9;
-          const scaleFactor = Math.sqrt(targetSize / imageBuffer.length);
-          
-          // 新しいサイズを計算
-          const newWidth = Math.floor(metadata.width * scaleFactor);
-          const newHeight = Math.floor(metadata.height * scaleFactor);
-          
-          console.log(`Resizing from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`);
-          
-          // リサイズと圧縮
-          imageBuffer = await sharp(imageBuffer)
-            .resize(newWidth, newHeight, { fit: 'inside' })
-            .jpeg({ quality: 85 })
-            .toBuffer();
-            
-          console.log(`Compressed size: ${imageBuffer.length} bytes`);
-        }
-
-        const localPath = `/tmp/${new Date().toISOString()}.data`
-
-        fs.writeFileSync(localPath, imageBuffer);
-        const mediaRes = await twitterClient.v1.uploadMedia(localPath);
-        media_ids.push(mediaRes);
+    for (let i = 0; i < images.length; i++) {
+      // 2枚目以降はディレイを入れて Cloudflare WAF のレート制限を回避
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, UPLOAD_DELAY_MS));
       }
+
+      // Supabase URLから画像を取得
+      const res = await fetch(images[i], { method: 'GET' });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch image ${i + 1}: ${res.status}`);
+      }
+
+      const buf = await res.arrayBuffer();
+      let imageBuffer = Buffer.from(buf);
+      let mimeType = res.headers.get('content-type') || 'image/jpeg';
+
+      // 5MB制限チェック（5,242,880 bytes）
+      const MAX_SIZE = 5242880;
+      if (imageBuffer.length > MAX_SIZE) {
+        console.log(`Image size ${imageBuffer.length} exceeds Twitter limit ${MAX_SIZE}, compressing...`);
+
+        // 画像メタデータを取得
+        const metadata = await sharp(imageBuffer).metadata();
+
+        // 目標サイズの90%に圧縮（余裕を持たせる）
+        const targetSize = MAX_SIZE * 0.9;
+        const scaleFactor = Math.sqrt(targetSize / imageBuffer.length);
+
+        // 新しいサイズを計算
+        const newWidth = Math.max(1, Math.floor(metadata.width * scaleFactor));
+        const newHeight = Math.max(1, Math.floor(metadata.height * scaleFactor));
+
+        console.log(`Resizing from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`);
+
+        // リサイズと圧縮
+        imageBuffer = await sharp(imageBuffer)
+          .resize(newWidth, newHeight, { fit: 'inside' })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+
+        console.log(`Compressed size: ${imageBuffer.length} bytes`);
+        mimeType = 'image/jpeg';
+      }
+
+      const mediaRes = await twitterClient.v1.uploadMedia(imageBuffer, { mimeType });
+      media_ids.push(mediaRes);
     }
 
     const media = (() => {
@@ -103,9 +106,16 @@ const handler = async (event) => {
     console.info('3. tweet scceeded', response);
     return response;
   } catch (error) {
-    console.log(`handler -> error:`, error);
-    
-    return { statusCode: 500, body: error.toString() }
+    console.error(`handler -> error:`, error);
+
+    const statusCode = error.code === 403 ? 403 : 500;
+    return {
+      statusCode,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({ error: error.message })
+    };
   }
 }
 
