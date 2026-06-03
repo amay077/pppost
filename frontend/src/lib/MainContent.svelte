@@ -177,6 +177,37 @@ const onTextChange = () => {
   saveMessage({ message: text });
 }
 
+// Web Share API による共有
+const webShareSupported = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+const shareContent = async () => {
+  try {
+    // 選択中の全画像を File 化
+    const files: File[] = [];
+    for (let i = 0; i < images.length; i++) {
+      const url = images[i].croppedUrl ?? images[i].originalUrl;
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const ext = blob.type.split('/')[1] ?? 'png';
+      files.push(new File([blob], `image_${i + 1}.${ext}`, { type: blob.type }));
+    }
+
+    const shareData: ShareData = { text };
+    // ファイル共有に対応している場合のみ files を含める（非対応時はテキストのみ）
+    if (files.length > 0 && typeof navigator.canShare === 'function' && navigator.canShare({ files })) {
+      shareData.files = files;
+    }
+
+    await navigator.share(shareData);
+  } catch (error) {
+    // ユーザーが共有シートをキャンセルした場合はエラー表示しない
+    if (error instanceof Error && error.name === 'AbortError') {
+      return;
+    }
+    console.error('shareContent -> error:', error);
+    alert('共有に失敗しました。');
+  }
+}
+
 // テキストのクリップボードコピー
 let textCopyState: 'idle' | 'success' | 'fail' = 'idle';
 let textCopyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -357,6 +388,12 @@ const getTypes = (post: PresentedPost) => {
       テキストをコピー
       {/if}
     </button>
+
+    {#if webShareSupported}
+    <button class="btn btn-outline-primary" on:click={() => shareContent()} disabled={text.length <= 0 && images.length <= 0}>
+      共有
+    </button>
+    {/if}
 
     </div> <!-- ボタン左寄せ div 閉じタグ -->
     <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
