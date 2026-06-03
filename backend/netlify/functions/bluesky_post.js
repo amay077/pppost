@@ -185,6 +185,31 @@ const handler = async (event) => {
       return null;
     };
 
+    // YouTube動画URLから動画IDを抽出する（YouTubeでなければnull）
+    // 対応形式: youtu.be/{id}, youtube.com/watch?v={id}, /shorts/{id}, /embed/{id}, /v/{id}
+    const extractYouTubeVideoId = (urlStr) => {
+      try {
+        const u = new URL(urlStr);
+        const host = u.hostname.replace(/^www\.|^m\./, '');
+        const ID = /^[A-Za-z0-9_-]{11}$/;
+        if (host === 'youtu.be') {
+          const id = u.pathname.slice(1).split('/')[0];
+          return ID.test(id) ? id : null;
+        }
+        if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+          if (u.pathname === '/watch') {
+            const v = u.searchParams.get('v');
+            return v && ID.test(v) ? v : null;
+          }
+          const m = u.pathname.match(/^\/(?:shorts|embed|v)\/([A-Za-z0-9_-]{11})/);
+          return m ? m[1] : null;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
     // OGP処理（画像がない場合のみ）
     const embedOgp = await (async () => {
       if (embedImages) return undefined; // 画像がある場合はOGPを使わない
@@ -192,34 +217,59 @@ const handler = async (event) => {
       const uri = findUrlInText(rt);
       if (!uri) return undefined;
 
+      const youtubeId = extractYouTubeVideoId(uri);
+
       try {
         // OGP情報を取得（cors_proxyエンドポイントを使用）
-        const corsProxyUrl = `${process.env.URL || 'http://localhost:9000'}/.netlify/functions/cors_proxy?url=${encodeURIComponent(uri)}`;
-        const ogpRes = await fetch(corsProxyUrl);
-        if (!ogpRes.ok) return undefined;
-
-        const html = await ogpRes.text();
-        
-        // シンプルなOGPパーサー（cheerioを使用）
-        const cheerio = require('cheerio');
-        const $ = cheerio.load(html);
+        // YouTubeはHTML取得が不安定なため、失敗してもタイトル・説明文を空のまま続行し、
+        // サムネイルは動画IDから直接生成する（best-effort）
         const ogp = {};
-        $('meta[property^="og:"]').each((_, elem) => {
-          const property = $(elem).attr('property');
-          const content = $(elem).attr('content');
-          if (property && content) {
-            ogp[property] = content;
+        try {
+          const corsProxyUrl = `${process.env.URL || 'http://localhost:9000'}/.netlify/functions/cors_proxy?url=${encodeURIComponent(uri)}`;
+          const ogpRes = await fetch(corsProxyUrl);
+          if (ogpRes.ok) {
+            const html = await ogpRes.text();
+
+            // シンプルなOGPパーサー（cheerioを使用）
+            const cheerio = require('cheerio');
+            const $ = cheerio.load(html);
+            $('meta[property^="og:"]').each((_, elem) => {
+              const property = $(elem).attr('property');
+              const content = $(elem).attr('content');
+              if (property && content) {
+                ogp[property] = content;
+              }
+            });
           }
-        });
+        } catch (error) {
+          console.error('Error fetching OGP metadata:', error);
+        }
 
-        if (!ogp['og:image']) return undefined;
+        // サムネイル画像URLの候補を決定する
+        // YouTube: 動画IDから直接組み立て（maxresdefault→hqdefaultの順にフォールバック）
+        // それ以外: OGPのog:imageを使用（従来通り）
+        const imageCandidates = youtubeId
+          ? [
+              `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`,
+              `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
+            ]
+          : (ogp['og:image'] ? [ogp['og:image']] : []);
 
-        // OGP画像を取得
-        const fetchImageUrl = `${process.env.URL || 'http://localhost:9000'}/.netlify/functions/fetch_image?url=${encodeURIComponent(ogp['og:image'])}`;
-        const imageRes = await fetch(fetchImageUrl);
-        if (!imageRes.ok) return undefined;
+        if (imageCandidates.length < 1) return undefined;
 
-        const dataURI = await imageRes.text();
+        // 候補を順にfetch_imageで取得し、最初に成功したものを使う
+        // （maxresdefaultが未生成=404の場合は次候補へフォールバック）
+        let dataURI = null;
+        for (const imageUrl of imageCandidates) {
+          const fetchImageUrl = `${process.env.URL || 'http://localhost:9000'}/.netlify/functions/fetch_image?url=${encodeURIComponent(imageUrl)}`;
+          const imageRes = await fetch(fetchImageUrl);
+          if (imageRes.ok) {
+            dataURI = await imageRes.text();
+            break;
+          }
+        }
+        if (!dataURI) return undefined;
+
         const [head, image] = dataURI.split(',');
         const parts = head.split(/[:;]/);
         const imageContentType = parts[1] || 'image/jpeg';
@@ -252,7 +302,7 @@ const handler = async (event) => {
               mimeType: uploadResult.blob.mimeType,
               size: uploadResult.blob.size,
             },
-            title: ogp['og:title'] || ' ',
+            title: ogp['og:title'] || (youtubeId ? 'YouTube' : ' '),
             description: ogp['og:description'] || ' ',
           }
         };
