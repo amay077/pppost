@@ -22,23 +22,13 @@ export type SettingDataBluesky = {
   }
 };
 
-export type SettingDataTwitter = {
-  type: 'twitter',
-  title: 'Twitter',
-  enabled: boolean,
-  token_data: {
-    token: string,
-  }
-};
-
-export type SettingData = SettingDataMastodon | SettingDataBluesky | SettingDataTwitter;
+export type SettingData = SettingDataMastodon | SettingDataBluesky;
 
 export type SettingType = SettingData['type'];
 
-export type SettingDataType<T extends SettingType> = 
+export type SettingDataType<T extends SettingType> =
   T extends 'mastodon' ? SettingDataMastodon :
-  T extends 'bluesky' ? SettingDataBluesky :
-  SettingDataTwitter;
+  SettingDataBluesky;
 
 export function savePostSetting(data: SettingData) {
   localStorage.setItem(`ppp_setting_${data.type}`, JSON.stringify(data));

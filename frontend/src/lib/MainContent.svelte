@@ -7,7 +7,6 @@ import twitterText from "twitter-text";
 import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
-import TwitterConnection from "./TwitterConnection.svelte";
 import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
 import dayjs from "dayjs";
@@ -27,14 +26,12 @@ let images: ImageData[] = []; // 新しいデータ構造の配列
 let expandedReply = false;
 let replyToIdForMastodon = '';
 let replyToIdForBluesky = '';
-let replyToIdForTwitter = '';
-let replyToPost: PresentedPost = { 
-  display_posted_at: undefined, 
-  trimmed_text: '', 
+let replyToPost: PresentedPost = {
+  display_posted_at: undefined,
+  trimmed_text: '',
   postOfType: {
     mastodon: undefined,
     bluesky: undefined,
-    twitter: undefined,
   }
 };
 
@@ -200,7 +197,6 @@ const post = async () => {
 
     const res = await postToSns(text, urlsToPost, { reply_to_ids: {
       mastodon: getPostId(replyToPost?.postOfType['mastodon']?.url ?? replyToIdForMastodon),
-      twitter: getPostId(replyToPost?.postOfType['twitter']?.url ?? replyToIdForTwitter),
       bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url ?? replyToIdForBluesky),
     } });
 
@@ -210,14 +206,12 @@ const post = async () => {
       images = []; // 画像配列をクリア
       replyToIdForMastodon = '';
       replyToIdForBluesky = '';
-      replyToIdForTwitter = '';
-      replyToPost = { 
-        display_posted_at: undefined, 
-        trimmed_text: '', 
+      replyToPost = {
+        display_posted_at: undefined,
+        trimmed_text: '',
         postOfType: {
           mastodon: undefined,
           bluesky: undefined,
-          twitter: undefined,
         }
       };
       alert('投稿しました。');
@@ -235,7 +229,6 @@ const post = async () => {
 const onChangePostSettings = () => {
   postSettings.mastodon = loadPostSetting('mastodon');
   postSettings.bluesky = loadPostSetting('bluesky');
-  postSettings.twitter = loadPostSetting('twitter');
 
   Object.entries(postTo).forEach(([k, v]) => {
     postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
@@ -278,12 +271,6 @@ const getTypes = (post: PresentedPost) => {
       <BlueskyConnection on:onChange={onChangePostSettings} />
     </div>
   </div>
-  <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
-    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.twitter} id="twitter" disabled={postSettings.twitter == null}>
-    <div class="w-100">
-      <TwitterConnection on:onChange={onChangePostSettings} />
-    </div>
-  </div>
 </div>
 
 <div class="mt-4">
@@ -318,12 +305,6 @@ const getTypes = (post: PresentedPost) => {
       {#if postSettings.bluesky != null && postTo.bluesky}
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3.268 64 68.414" width="16" height="16"><path fill="currentColor" d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>
       {/if}
-      {#if postSettings.twitter != null && postTo.twitter}            
-      <svg style="margin-top: -2px;" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-twitter" viewBox="0 0 16 16">
-        <path d="M5.026 15c6.038 0 9.341-5.003 9.341-9.334 0-.14 0-.282-.006-.422A6.685 6.685 0 0 0 16 3.542a6.658 6.658 0 0 1-1.889.518 3.301 3.301 0 0 0 1.447-1.817 6.533 6.533 0 0 1-2.087.793A3.286 3.286 0 0 0 7.875 6.03a9.325 9.325 0 0 1-6.767-3.429 3.289 3.289 0 0 0 1.018 4.382A3.323 3.323 0 0 1 .64 6.575v.045a3.288 3.288 0 0 0 2.632 3.218 3.203 3.203 0 0 1-.865.115 3.23 3.23 0 0 1-.614-.057 3.283 3.283 0 0 0 3.067 2.277A6.588 6.588 0 0 1 .78 13.58a6.32 6.32 0 0 1-.78-.045A9.344 9.344 0 0 0 5.026 15z"/>
-      </svg>
-      {/if}
-
       <span>Post</span>
     </div>
     {/if}
@@ -335,14 +316,12 @@ const getTypes = (post: PresentedPost) => {
     images = []; // 画像データをクリア
     replyToIdForMastodon = '';
     replyToIdForBluesky = '';
-    replyToIdForTwitter = '';
     replyToPost = {
       display_posted_at: undefined,
       trimmed_text: '',
       postOfType: {
         mastodon: undefined,
         bluesky: undefined,
-        twitter: undefined,
       }
     };
     onTextChange();
@@ -415,16 +394,7 @@ const getTypes = (post: PresentedPost) => {
   {#if postSettings.bluesky != null && postTo.bluesky}            
   <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
     <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 -3.268 64 68.414" width="16" height="16"><path fill="currentColor" d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>
-    <input class="form-control" type="text" placeholder="Post URL or ID" bind:value={replyToIdForBluesky}  />    
-  </div>
-  {/if}
-
-  {#if postSettings.twitter != null && postTo.twitter}            
-  <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
-    <svg style="width: 18px; margin-top: -2px;" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-twitter" viewBox="0 0 16 16">
-      <path d="M5.026 15c6.038 0 9.341-5.003 9.341-9.334 0-.14 0-.282-.006-.422A6.685 6.685 0 0 0 16 3.542a6.658 6.658 0 0 1-1.889.518 3.301 3.301 0 0 0 1.447-1.817 6.533 6.533 0 0 1-2.087.793A3.286 3.286 0 0 0 7.875 6.03a9.325 9.325 0 0 1-6.767-3.429 3.289 3.289 0 0 0 1.018 4.382A3.323 3.323 0 0 1 .64 6.575v.045a3.288 3.288 0 0 0 2.632 3.218 3.203 3.203 0 0 1-.865.115 3.23 3.23 0 0 1-.614-.057 3.283 3.283 0 0 0 3.067 2.277A6.588 6.588 0 0 1 .78 13.58a6.32 6.32 0 0 1-.78-.045A9.344 9.344 0 0 0 5.026 15z"/>
-    </svg>
-    <input class="form-control" type="text" placeholder="Tweet URL or ID" bind:value={replyToIdForTwitter}  />    
+    <input class="form-control" type="text" placeholder="Post URL or ID" bind:value={replyToIdForBluesky}  />
   </div>
   {/if}
   {/if}

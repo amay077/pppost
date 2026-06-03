@@ -1,5 +1,5 @@
 import { Config } from "../config";
-import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataTwitter, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
+import { type SettingDataMastodon, type SettingDataBluesky, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
 import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
 import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
@@ -29,17 +29,14 @@ export interface ImageData {
 export const postSettings: {
   mastodon: SettingDataMastodon | null,
   bluesky: SettingDataBluesky | null,
-  twitter: SettingDataTwitter | null,
 } = {
   mastodon: loadPostSetting('mastodon'),
   bluesky: loadPostSetting('bluesky'),
-  twitter: loadPostSetting('twitter'),
 };
 
 export const postTo: { [K in SettingType]: boolean } = {
   mastodon: postSettings?.mastodon?.enabled ?? false,
   bluesky: postSettings?.bluesky?.enabled ?? false,
-  twitter: postSettings?.twitter?.enabled ?? false,
 };
 
 export async function getApiVersion(): Promise<{ build_at: string, env_ver: string }> {
@@ -68,11 +65,8 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
     case 'bluesky':
       promises.push(loadMyPostsBluesky().then(posts => ({ type: 'bluesky', posts })));
       break;
-    case 'twitter':
-      promises.push(loadMyPostsTwritter().then(posts => ({ type: 'twitter', posts })));
-      break;
     }
-  }  
+  }
   const posts = await Promise.allSettled(promises);
 
   const succeededPosts = posts.filter((p) => p.status == 'fulfilled').map(x => x.value).reduce((acc, cur) => {
@@ -145,7 +139,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
         grouped[key] = {
           display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
           trimmed_text: trimText(post.text),
-          postOfType: { mastodon: undefined, twitter: undefined, bluesky: undefined }
+          postOfType: { mastodon: undefined, bluesky: undefined }
         };
       }
       grouped[key].postOfType[type] = post;
@@ -158,24 +152,11 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
   console.log(result);
 
   return result;
-
-  return succeededPosts.map((p) => {
-    return {
-      display_posted_at: dayjs(p.post.posted_at).format('M/DD H:mm'),
-      trimmed_text: trimText(p.post.text),
-      postOfType: {
-        mastodon: p.type == 'mastodon' ? p.post : undefined,
-        bluesky: p.type == 'bluesky' ? p.post : undefined,
-        twitter: p.type == 'twitter' ? p.post : undefined,
-      }
-    }
-  });
 }
 
 export const postToSns = async (text: string, imageDataURLs: string[], options: { reply_to_ids: {
   mastodon: string,
   bluesky: string,
-  twitter: string,
 }}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
@@ -209,9 +190,6 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       break;
     case 'bluesky':
       promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
-      break;
-    case 'twitter':
-      promises.push(postToTwritter(text, uploadedImageUrls, options?.reply_to_ids?.twitter).then((r) => { if (!r) errors.push('Twitter') }));
       break;
     }
 
@@ -330,32 +308,6 @@ const loadMyPostsBluesky = async (): Promise<Post[]> => {
   }
 }; 
 
-const loadMyPostsTwritter = async (): Promise<Post[]> => {
-  try {
-    const settings = postSettings.twitter!;
-    const token = settings.token_data.token;
-
-    const res = await fetch(`${Config.API_ENDPOINT}/twitter_posts`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: JSON.stringify({ token }),
-    });
-
-    if (res.ok) {
-      const resJson = await res.json();
-      console.log(`FIXME 後で消す  -> loadMyPostsTwritter -> resJson:`, resJson);
-      return resJson;
-    } else {
-      return [];
-    }
-  } catch (error) {
-    console.error(`loadMyPostsTwritter -> error:`, error);
-    return [];       
-  }
-};    
-
 const loadMyPostsMastodon = async (): Promise<Post[]> => {
   try {
     const settings = postSettings.mastodon!;
@@ -438,34 +390,3 @@ const uploadImage = async (content: string, filename: string = 'image.png'): Pro
   // Supabaseに直接アップロード
   return await uploadImageToSupabase(content, filename);
 }
-
-const postToTwritter = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
-  try {
-    const settings = postSettings.twitter!;
-    const token = settings.token_data.token;
-
-    /*
-    const images: string[] = [
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII',
-    ];
-    */
-    const res = await fetch(`${Config.API_ENDPOINT}/twitter_post`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: JSON.stringify({ token, text, images: imageUrls, reply_to_id }),
-    });
-
-    if (res.ok) {
-      const resJson = await res.json();
-      console.log(`FIXME 後で消す  -> postToTwritter -> resJson:`, resJson);
-    } else {
-      return false;
-    }
-    return true;       
-  } catch (error) {
-    console.error(`postToMastodon -> error:`, error);
-    return false;       
-  }
-};    

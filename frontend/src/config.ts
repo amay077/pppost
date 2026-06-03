@@ -6,9 +6,6 @@ export type ConfigType = {
       server: string,
       client_id: string,
     }[],
-    twitter: {
-      redirect_uri: string,
-    },
   },
 }
 
@@ -29,9 +26,6 @@ export const Config = ((): ConfigType => {
     API_ENDPOINT: import.meta.env.VITE_API_ENDPOINT,
     post_targets: {
       mastodon,
-      twitter: {
-        redirect_uri: import.meta.env.VITE_TWITTER_REDIRECT_URL,
-      }
     }
   };
 })();
