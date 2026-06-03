@@ -134,6 +134,34 @@
     images = images.filter((_, i) => i !== index);
   };
 
+  // 画像のクリップボードコピー（押下したボタンに対応する 1 枚のみ）
+  let imageCopyState: { [id: string]: 'idle' | 'success' | 'fail' } = {};
+  let imageCopyTimers: { [id: string]: ReturnType<typeof setTimeout> } = {};
+
+  const copyImage = async (image: ImageData) => {
+    // クロップ済みなら croppedUrl、未クロップなら originalUrl をコピー
+    const url = image.croppedUrl ?? image.originalUrl;
+    try {
+      if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+        throw new Error('Clipboard API is unavailable');
+      }
+      const res = await fetch(url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      imageCopyState[image.id] = 'success';
+    } catch (error) {
+      console.error('copyImage -> error:', error);
+      imageCopyState[image.id] = 'fail';
+    } finally {
+      imageCopyState = { ...imageCopyState };
+      if (imageCopyTimers[image.id]) clearTimeout(imageCopyTimers[image.id]);
+      imageCopyTimers[image.id] = setTimeout(() => {
+        imageCopyState[image.id] = 'idle';
+        imageCopyState = { ...imageCopyState };
+      }, 2000);
+    }
+  };
+
 </script>
 
 <div class="d-flex flex-column">
@@ -166,6 +194,26 @@
         on:click={() => removeImage(index)}
       >
         &times;
+      </button>
+      <!-- コピーボタン -->
+      <button
+        class="btn btn-sm position-absolute top-0 start-0 p-0 m-1 d-flex justify-content-center align-items-center {imageCopyState[image.id] === 'success' ? 'btn-success' : imageCopyState[image.id] === 'fail' ? 'btn-danger' : 'btn-primary'}"
+        style="line-height: 1; width: 1.2rem; height: 1.2rem; border-radius: 50%; font-size: 0.7rem;"
+        aria-label={imageCopyState[image.id] === 'success' ? `画像をコピーしました ${index + 1}` : imageCopyState[image.id] === 'fail' ? `画像のコピーに失敗 ${index + 1}` : `画像をコピー ${index + 1}`}
+        title={imageCopyState[image.id] === 'success' ? 'コピーしました' : imageCopyState[image.id] === 'fail' ? 'コピー失敗' : '画像をコピー'}
+        on:click={() => copyImage(image)}
+      >
+        {#if imageCopyState[image.id] === 'success'}
+        &checkmark;
+        {:else if imageCopyState[image.id] === 'fail'}
+        !
+        {:else}
+        <!-- SVG for clipboard icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" class="bi bi-clipboard" viewBox="0 0 16 16">
+          <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+          <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+        </svg>
+        {/if}
       </button>
       <!-- 編集ボタン -->
       <button

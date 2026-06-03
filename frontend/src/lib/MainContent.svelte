@@ -177,6 +177,25 @@ const onTextChange = () => {
   saveMessage({ message: text });
 }
 
+// テキストのクリップボードコピー
+let textCopyState: 'idle' | 'success' | 'fail' = 'idle';
+let textCopyTimer: ReturnType<typeof setTimeout> | undefined;
+const copyText = async () => {
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      throw new Error('Clipboard API is unavailable');
+    }
+    await navigator.clipboard.writeText(text);
+    textCopyState = 'success';
+  } catch (error) {
+    console.error('copyText -> error:', error);
+    textCopyState = 'fail';
+  } finally {
+    if (textCopyTimer) clearTimeout(textCopyTimer);
+    textCopyTimer = setTimeout(() => { textCopyState = 'idle'; }, 2000);
+  }
+}
+
 const post = async () => {
 
   try {
@@ -327,6 +346,16 @@ const getTypes = (post: PresentedPost) => {
     onTextChange();
   }}" disabled={text.length <= 0 && images.length <= 0}>
     Clear
+    </button>
+
+    <button class="btn btn-outline-secondary" on:click={() => copyText()} disabled={text.length <= 0}>
+      {#if textCopyState === 'success'}
+      コピーしました
+      {:else if textCopyState === 'fail'}
+      コピー失敗
+      {:else}
+      テキストをコピー
+      {/if}
     </button>
 
     </div> <!-- ボタン左寄せ div 閉じタグ -->

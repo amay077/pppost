@@ -2,23 +2,23 @@
 
 ## 1. テキストコピー機能
 
-- [ ] 1.1 `MainContent.svelte` のテキストエリア付近のボタングループ（既存 Post / Clear と並ぶ位置）にコピーボタンを追加
-- [ ] 1.2 クリックで `navigator.clipboard.writeText(text)` を呼びテキストをコピー
-- [ ] 1.3 `text.length <= 0` のときはボタンを無効化 (disabled)
-- [ ] 1.4 コピー成功時にボタン文言を `コピーしました` へ変更し、2 秒後に元へ戻す。失敗時は `コピー失敗` へ変更し 2 秒後に元へ戻す
-- [ ] 1.5 既存の Bootstrap ボタン様式（`btn btn-sm` 等）に合わせる
+- [x] 1.1 `MainContent.svelte` のテキストエリア付近のボタングループ（既存 Post / Clear と並ぶ位置）にコピーボタンを追加
+- [x] 1.2 クリックで `navigator.clipboard.writeText(text)` を呼びテキストをコピー
+- [x] 1.3 `text.length <= 0` のときはボタンを無効化 (disabled)
+- [x] 1.4 コピー成功時にボタン文言を `コピーしました` へ変更し、2 秒後に元へ戻す。失敗時は `コピー失敗` へ変更し 2 秒後に元へ戻す
+- [x] 1.5 既存の Bootstrap ボタン様式（`btn btn-sm` 等）に合わせる
 
 ## 2. 画像コピー機能
 
-- [ ] 2.1 `ImagePreview.svelte` の各画像コンテナ（削除・編集ボタンと同じ `position-absolute` 丸ボタン様式）にコピーボタンを追加
-- [ ] 2.2 表示中 URL (`image.croppedUrl ?? image.originalUrl`) を `fetch(url).then(r => r.blob())` で Blob 化
-- [ ] 2.3 `navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])` で画像をコピー
-- [ ] 2.4 コピー成功時に画像コピーボタンの表示を成功状態（`コピーしました`）へ変更し、2 秒後に元へ戻す。失敗時は失敗状態（`コピー失敗`）へ変更し 2 秒後に元へ戻す
+- [x] 2.1 `ImagePreview.svelte` の各画像コンテナ（削除・編集ボタンと同じ `position-absolute` 丸ボタン様式）にコピーボタンを追加
+- [x] 2.2 表示中 URL (`image.croppedUrl ?? image.originalUrl`) を `fetch(url).then(r => r.blob())` で Blob 化
+- [x] 2.3 `navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])` で画像をコピー
+- [x] 2.4 コピー成功時に画像コピーボタンの表示を成功状態（`コピーしました`）へ変更し、2 秒後に元へ戻す。失敗時は失敗状態（`コピー失敗`）へ変更し 2 秒後に元へ戻す
 
 ## 3. フォールバック・エラーハンドリング
 
-- [ ] 3.1 `navigator.clipboard` / `ClipboardItem` 非対応環境では失敗を握りつぶさずユーザーに通知する
-- [ ] 3.2 画像 MIME タイプがクリップボードに非対応の場合のエラーハンドリングを実装
+- [x] 3.1 `navigator.clipboard` / `ClipboardItem` 非対応環境では失敗を握りつぶさずユーザーに通知する
+- [x] 3.2 画像 MIME タイプがクリップボードに非対応の場合のエラーハンドリングを実装
 
 ## 4. 動作検証
 
