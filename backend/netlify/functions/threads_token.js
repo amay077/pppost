@@ -34,22 +34,8 @@ const handler = async (event) => {
     const user_id = shortJson.user_id;
     const shortToken = shortJson.access_token;
 
-    // 2. 長命トークン（60 日）へ交換
-    const longRes = await fetch(`https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${client_secret}&access_token=${shortToken}`);
-
-    if (!longRes.ok) {
-      console.error(`long-lived token request failed: ${longRes.status}`, await longRes.text());
-      return {
-        statusCode: longRes.status,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: 'failed to get long-lived token' })
-      }
-    }
-
-    const longJson = await longRes.json();
-
+    // 長命トークン交換は threads_basic の App Review 承認後に有効化予定。
+    // 暫定: 短命トークン（約 1 時間）をそのまま返す。
     const response = {
       statusCode: 200,
       headers: {
@@ -58,9 +44,9 @@ const handler = async (event) => {
       },
       body: JSON.stringify({
         user_id,
-        access_token: longJson.access_token,
-        token_type: longJson.token_type,
-        expires_in: longJson.expires_in,
+        access_token: shortToken,
+        token_type: 'Bearer',
+        expires_in: 3600,
       })
     };
     console.log(`finish handler - `, response);
