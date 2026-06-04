@@ -6,6 +6,10 @@ export type ConfigType = {
       server: string,
       client_id: string,
     }[],
+    threads: {
+      client_id: string,
+      redirect_uri: string,
+    },
   },
 }
 
@@ -26,6 +30,10 @@ export const Config = ((): ConfigType => {
     API_ENDPOINT: import.meta.env.VITE_API_ENDPOINT,
     post_targets: {
       mastodon,
+      threads: {
+        client_id: import.meta.env.VITE_THREADS_CLIENT_ID,
+        redirect_uri: import.meta.env.VITE_THREADS_REDIRECT_URL,
+      },
     }
   };
 })();
