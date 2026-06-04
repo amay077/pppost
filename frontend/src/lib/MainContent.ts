@@ -195,7 +195,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'threads':
-      promises.push(postToThreads(text).then((r) => { if (!r) errors.push('Threads') }));
+      promises.push(postToThreads(text, uploadedImageUrls).then((r) => { if (!r) errors.push('Threads') }));
       break;
     }
 
@@ -274,7 +274,7 @@ const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: st
 };  
 
 
-const postToThreads = async (text: string): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[]): Promise<boolean> => {
   try {
     const settings = postSettings.threads!;
 
@@ -287,6 +287,7 @@ const postToThreads = async (text: string): Promise<boolean> => {
         user_id: settings.user_id,
         token: settings.token_data.access_token,
         text,
+        images: imageUrls,
       }),
     });
 
