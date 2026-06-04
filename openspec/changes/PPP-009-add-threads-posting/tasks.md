@@ -11,7 +11,7 @@
 ## 2. 設定（config.ts）
 
 - [ ] 2.1 `post_targets` に `threads: { client_id: string, redirect_uri: string }` を追加する
-- [ ] 2.2 `import.meta.env.VITE_THREADS_CLIENT_ID` / `VITE_THREADS_REDIRECT_URI` から値を読み込む
+- [ ] 2.2 `import.meta.env.VITE_THREADS_CLIENT_ID` / `VITE_THREADS_REDIRECT_URL` から値を読み込む
 - [ ] 2.3 `client_secret` はフロントに置かないことを確認する（バックエンド env のみ）
 
 ## 3. 接続 UI（ThreadsConnection.svelte）
@@ -47,7 +47,7 @@
 - [ ] 6.2 `GET ?code=<code>` を受け、`POST https://graph.threads.net/oauth/access_token`（`grant_type=authorization_code`）で短命トークンと `user_id` を取得する
 - [ ] 6.3 `GET https://graph.threads.net/access_token`（`grant_type=th_exchange_token`）で長命トークンへ交換する
 - [ ] 6.4 `{ user_id, access_token, token_type, expires_in }` を CORS ヘッダ付きで返す
-- [ ] 6.5 env `PPPOST_THREADS_CLIENT_ID` / `PPPOST_THREADS_CLIENT_SECRET` / `PPPOST_THREADS_REDIRECT_URI` を使用する
+- [ ] 6.5 env `PPPOST_THREADS_CLIENT_ID` / `PPPOST_THREADS_CLIENT_SECRET` / `PPPOST_THREADS_REDIRECT_URL` を使用する
 
 ## 7. バックエンド: 投稿（threads_post.js）
 
@@ -59,9 +59,9 @@
 
 ## 8. 環境変数
 
-- [ ] 8.1 `backend/.env.example` に `PPPOST_THREADS_CLIENT_ID` / `PPPOST_THREADS_CLIENT_SECRET` / `PPPOST_THREADS_REDIRECT_URI` を追記する
-- [ ] 8.2 フロントの env に `VITE_THREADS_CLIENT_ID` / `VITE_THREADS_REDIRECT_URI` を追記する（フロントには `.env.example` が存在せず `frontend/.env` のみのため、`frontend/.env` に追記する。必要に応じて `frontend/.env.example` を新規作成してもよい）
-- [ ] 8.3 `redirect_uri` がフロント（`VITE_THREADS_REDIRECT_URI`）とバックエンド（`PPPOST_THREADS_REDIRECT_URI`）で同値であることを確認する
+- [ ] 8.1 `backend/.env.example` に `PPPOST_THREADS_CLIENT_ID` / `PPPOST_THREADS_CLIENT_SECRET` / `PPPOST_THREADS_REDIRECT_URL` を追記する
+- [ ] 8.2 フロントの env に `VITE_THREADS_CLIENT_ID` / `VITE_THREADS_REDIRECT_URL` を追記する（フロントには `.env.example` が存在せず `frontend/.env` のみのため、`frontend/.env` に追記する。必要に応じて `frontend/.env.example` を新規作成してもよい）
+- [ ] 8.3 `redirect_uri` がフロント（`VITE_THREADS_REDIRECT_URL`）とバックエンド（`PPPOST_THREADS_REDIRECT_URL`）で同値であることを確認する
 
 ## 9. 動作検証
 
