@@ -18,6 +18,7 @@ let myPosts: PresentedPost[] =[];
 let loading = true;
 let loadingMyPosts = false;
 let posting = false;
+let posted = false;
 
 let text = loadMessage()?.message ?? '';
 // let imageDataURLs: string[] = []; // 古い形式は削除
@@ -251,9 +252,6 @@ const post = async () => {
     } });
 
     if (res.errors.length == 0) {
-      text = '';
-      onTextChange();
-      images = []; // 画像配列をクリア
       replyToIdForMastodon = '';
       replyToIdForBluesky = '';
       replyToPost = {
@@ -264,6 +262,7 @@ const post = async () => {
           bluesky: undefined,
         }
       };
+      posted = true;
       alert('投稿しました。');
     } else {
       alert(`${res.errors.join(', ')}に投稿できませんでした。`);
@@ -338,7 +337,7 @@ const getTypes = (post: PresentedPost) => {
   </div>
   <div class="d-flex justify-content-between align-items-center"> <!-- ボタンと文字数を横並びにするための div -->
     <div class="d-flex flex-row gap-2"> <!-- ボタンを左寄せするための div -->
-    <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
+    <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || posted || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
 
     {#if posting}
     <div class="spinner-border spinner-border-sm" role="status">
@@ -374,6 +373,7 @@ const getTypes = (post: PresentedPost) => {
         bluesky: undefined,
       }
     };
+    posted = false;
     onTextChange();
   }}" disabled={text.length <= 0 && images.length <= 0}>
     Clear
