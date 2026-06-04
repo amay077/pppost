@@ -219,6 +219,24 @@ const handler = async (event) => {
 
       const youtubeId = extractYouTubeVideoId(uri);
 
+      // YouTubeはHTMLスクレイピングが不安定なため、oEmbedでタイトルを確実に取得する（best-effort）
+      let youtubeTitle = null;
+      if (youtubeId) {
+        try {
+          const watchUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
+          const oembedUrl = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watchUrl)}`;
+          const oembedRes = await fetch(oembedUrl);
+          if (oembedRes.ok) {
+            const data = await oembedRes.json();
+            if (data && typeof data.title === 'string' && data.title.trim()) {
+              youtubeTitle = data.title.trim();
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching YouTube oEmbed:', error);
+        }
+      }
+
       try {
         // OGP情報を取得（cors_proxyエンドポイントを使用）
         // YouTubeはHTML取得が不安定なため、失敗してもタイトル・説明文を空のまま続行し、
@@ -302,7 +320,7 @@ const handler = async (event) => {
               mimeType: uploadResult.blob.mimeType,
               size: uploadResult.blob.size,
             },
-            title: ogp['og:title'] || (youtubeId ? 'YouTube' : ' '),
+            title: youtubeTitle || ogp['og:title'] || (youtubeId ? 'YouTube' : ' '),
             description: ogp['og:description'] || ' ',
           }
         };
