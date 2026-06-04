@@ -18,7 +18,7 @@ const handler = async (event) => {
     const { user_id, token, text } = JSON.parse(event.body);
 
     // 1. メディアコンテナ作成（media_type=TEXT）
-    const createRes = await fetch(`https://graph.threads.net/v1.0/${user_id}/threads`, {
+    const createRes = await fetch(`https://graph.threads.net/v1.0/me/threads`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -41,7 +41,7 @@ const handler = async (event) => {
     const creation_id = createJson.id;
 
     // 2. 公開
-    const publishRes = await fetch(`https://graph.threads.net/v1.0/${user_id}/threads_publish`, {
+    const publishRes = await fetch(`https://graph.threads.net/v1.0/me/threads_publish`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
