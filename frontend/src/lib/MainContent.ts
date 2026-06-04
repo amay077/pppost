@@ -1,5 +1,5 @@
 import { Config } from "../config";
-import { type SettingDataMastodon, type SettingDataBluesky, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
+import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
 import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
 import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
@@ -29,14 +29,17 @@ export interface ImageData {
 export const postSettings: {
   mastodon: SettingDataMastodon | null,
   bluesky: SettingDataBluesky | null,
+  threads: SettingDataThreads | null,
 } = {
   mastodon: loadPostSetting('mastodon'),
   bluesky: loadPostSetting('bluesky'),
+  threads: loadPostSetting('threads'),
 };
 
 export const postTo: { [K in SettingType]: boolean } = {
   mastodon: postSettings?.mastodon?.enabled ?? false,
   bluesky: postSettings?.bluesky?.enabled ?? false,
+  threads: postSettings?.threads?.enabled ?? false,
 };
 
 export async function getApiVersion(): Promise<{ build_at: string, env_ver: string }> {
@@ -139,7 +142,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
         grouped[key] = {
           display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
           trimmed_text: trimText(post.text),
-          postOfType: { mastodon: undefined, bluesky: undefined }
+          postOfType: { mastodon: undefined, bluesky: undefined, threads: undefined }
         };
       }
       grouped[key].postOfType[type] = post;
@@ -190,6 +193,9 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       break;
     case 'bluesky':
       promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
+      break;
+    case 'threads':
+      promises.push(postToThreads(text).then((r) => { if (!r) errors.push('Threads') }));
       break;
     }
 
@@ -266,6 +272,30 @@ const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: st
     return false;       
   }
 };  
+
+
+const postToThreads = async (text: string): Promise<boolean> => {
+  try {
+    const settings = postSettings.threads!;
+
+    const res = await fetch(`${Config.API_ENDPOINT}/threads_post`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: settings.user_id,
+        token: settings.token_data.access_token,
+        text,
+      }),
+    });
+
+    return res.ok;
+  } catch (error) {
+    console.error(`postToThreads -> error:`, error);
+    return false;
+  }
+};
 
 
 const loadMyPostsBluesky = async (): Promise<Post[]> => {

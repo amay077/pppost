@@ -6,7 +6,9 @@ import twitterText from "twitter-text";
 
 import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
-import { loadMessage, loadPostSetting, saveMessage, type SettingType } from "./func";
+import ThreadsConnection from "./ThreadsConnection.svelte";
+import { loadMessage, loadPostSetting, saveMessage, savePostSetting, type SettingType } from "./func";
+import { Config } from "../config";
 import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
 import dayjs from "dayjs";
@@ -33,6 +35,7 @@ let replyToPost: PresentedPost = {
   postOfType: {
     mastodon: undefined,
     bluesky: undefined,
+    threads: undefined,
   }
 };
 
@@ -131,6 +134,33 @@ onMount(async () => {
     // }
 
     const urlParams = new URLSearchParams(window.location.search);
+
+    // Threads OAuth コールバック処理
+    if (urlParams.get('state') === 'threads_callback' && urlParams.has('code')) {
+      const code = urlParams.get('code') ?? '';
+      const res = await fetch(`${Config.API_ENDPOINT}/threads_token?code=${encodeURIComponent(code)}`);
+      if (res.ok) {
+        const resJson = await res.json();
+        savePostSetting({
+          type: 'threads',
+          title: 'Threads',
+          enabled: true,
+          user_id: resJson.user_id,
+          token_data: {
+            access_token: resJson.access_token,
+            token_type: resJson.token_type,
+            expires_in: resJson.expires_in,
+            obtained_at: Date.now(),
+          },
+        });
+        onChangePostSettings();
+      } else {
+        console.error(`failed to exchange threads token:`, res);
+      }
+
+      // URL から code を除去する
+      history.replaceState(null, '', window.location.pathname);
+    }
 
     const content = urlParams.get('text');
     const url = urlParams.get('url');
@@ -260,6 +290,7 @@ const post = async () => {
         postOfType: {
           mastodon: undefined,
           bluesky: undefined,
+          threads: undefined,
         }
       };
       posted = true;
@@ -278,6 +309,7 @@ const post = async () => {
 const onChangePostSettings = () => {
   postSettings.mastodon = loadPostSetting('mastodon');
   postSettings.bluesky = loadPostSetting('bluesky');
+  postSettings.threads = loadPostSetting('threads');
 
   Object.entries(postTo).forEach(([k, v]) => {
     postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
@@ -320,6 +352,12 @@ const getTypes = (post: PresentedPost) => {
       <BlueskyConnection on:onChange={onChangePostSettings} />
     </div>
   </div>
+  <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
+    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.threads} id="threads" disabled={postSettings.threads == null}>
+    <div class="w-100">
+      <ThreadsConnection on:onChange={onChangePostSettings} />
+    </div>
+  </div>
 </div>
 
 <div class="mt-4">
@@ -354,6 +392,9 @@ const getTypes = (post: PresentedPost) => {
       {#if postSettings.bluesky != null && postTo.bluesky}
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3.268 64 68.414" width="16" height="16"><path fill="currentColor" d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>
       {/if}
+      {#if postSettings.threads != null && postTo.threads}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="16" height="16"><path fill="currentColor" d="M141.537 88.988a66.667 66.667 0 0 0-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.229c8.249.053 14.474 2.452 18.503 7.129 2.932 3.405 4.893 8.111 5.864 14.05-7.314-1.243-15.224-1.626-23.68-1.14-23.82 1.371-39.134 15.264-38.105 34.568.522 9.792 5.4 18.216 13.735 23.719 7.047 4.652 16.124 6.927 25.557 6.412 12.458-.683 22.231-5.436 29.049-14.127 5.178-6.6 8.453-15.153 9.899-25.93 5.937 3.583 10.337 8.298 12.767 13.966 4.132 9.635 4.373 25.468-8.546 38.376-11.319 11.308-24.925 16.2-45.488 16.351-22.809-.169-40.06-7.484-51.275-21.742C35.236 139.966 29.808 120.682 29.605 96c.203-24.682 5.63-43.966 16.133-57.317C56.954 24.425 74.204 17.11 97.013 16.94c22.975.17 40.526 7.52 52.171 21.847 5.71 7.026 10.015 15.86 12.853 26.162l16.147-4.308c-3.44-12.68-8.853-23.606-16.219-32.668C147.036 9.607 124.999.195 97.07 0h-.113C69.087.194 47.295 9.642 32.32 28.08 18.994 44.485 12.12 67.315 11.89 95.932L11.89 96l.001.067c.23 28.617 7.104 51.448 20.43 67.853C47.295 182.358 69.087 191.806 96.957 192h.113c24.78-.172 42.236-6.652 56.61-21.019 18.806-18.788 18.24-42.343 12.05-56.78-4.441-10.359-12.91-18.769-24.493-24.319l.3.106Z"/></svg>
+      {/if}
       <span>Post</span>
     </div>
     {/if}
@@ -371,6 +412,7 @@ const getTypes = (post: PresentedPost) => {
       postOfType: {
         mastodon: undefined,
         bluesky: undefined,
+        threads: undefined,
       }
     };
     posted = false;

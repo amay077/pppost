@@ -22,12 +22,26 @@ export type SettingDataBluesky = {
   }
 };
 
-export type SettingData = SettingDataMastodon | SettingDataBluesky;
+export type SettingDataThreads = {
+  type: 'threads',
+  title: 'Threads',
+  enabled: boolean,
+  user_id: string,
+  token_data: {
+    access_token: string,
+    token_type: string,
+    expires_in: number,
+    obtained_at: number,
+  }
+};
+
+export type SettingData = SettingDataMastodon | SettingDataBluesky | SettingDataThreads;
 
 export type SettingType = SettingData['type'];
 
 export type SettingDataType<T extends SettingType> =
   T extends 'mastodon' ? SettingDataMastodon :
+  T extends 'threads' ? SettingDataThreads :
   SettingDataBluesky;
 
 export function savePostSetting(data: SettingData) {

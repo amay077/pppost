@@ -15,7 +15,7 @@
 - `MainContent.svelte` に Threads の投稿対象チェックボックスと投稿ボタン横のアイコンを追加する
 - `MainContent.ts` の `postSettings` / `postTo` に `threads` を追加し、`postToThreads()` 関数と `postToSns` の `switch` 分岐を追加する
 - バックエンド `threads_token.js`（短命→長命トークン交換）と `threads_post.js`（2 段階のテキスト投稿）を新規作成する
-- 環境変数を追加する（バックエンド: `PPPOST_THREADS_CLIENT_ID` / `PPPOST_THREADS_CLIENT_SECRET` / `PPPOST_THREADS_REDIRECT_URI`、フロント: `VITE_THREADS_CLIENT_ID` / `VITE_THREADS_REDIRECT_URI`）
+- 環境変数を追加する（バックエンド: `PPPOST_THREADS_CLIENT_ID` / `PPPOST_THREADS_CLIENT_SECRET` / `PPPOST_THREADS_REDIRECT_URL`、フロント: `VITE_THREADS_CLIENT_ID` / `VITE_THREADS_REDIRECT_URL`）
 
 ## Non-Goals
 
