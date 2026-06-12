@@ -162,6 +162,35 @@ onMount(async () => {
       history.replaceState(null, '', window.location.pathname);
     }
 
+    // Threads 長命トークンの自動リフレッシュ
+    // 接続済みかつ取得から 24 時間以上経過している場合のみリフレッシュする
+    const threadsSetting = loadPostSetting('threads');
+    if (threadsSetting != null) {
+      const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+      if (Date.now() - threadsSetting.token_data.obtained_at >= REFRESH_THRESHOLD_MS) {
+        try {
+          const refreshRes = await fetch(`${Config.API_ENDPOINT}/threads_refresh?token=${encodeURIComponent(threadsSetting.token_data.access_token)}`);
+          if (refreshRes.ok) {
+            const refreshJson = await refreshRes.json();
+            savePostSetting({
+              ...threadsSetting,
+              token_data: {
+                access_token: refreshJson.access_token,
+                token_type: refreshJson.token_type,
+                expires_in: refreshJson.expires_in,
+                obtained_at: Date.now(),
+              },
+            });
+            onChangePostSettings();
+          } else {
+            console.error(`failed to refresh threads token:`, refreshRes);
+          }
+        } catch (error) {
+          console.error(`failed to refresh threads token:`, error);
+        }
+      }
+    }
+
     const content = urlParams.get('text');
     const url = urlParams.get('url');
     let queryValueUsed: string | null = null;
