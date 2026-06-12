@@ -67,8 +67,13 @@ const handler = async (event) => {
   }
 
   try {
-    const { user_id, token, text, images } = JSON.parse(event.body);
+    const { user_id, token, text, images, reply_to_id } = JSON.parse(event.body);
     const imageUrls = Array.isArray(images) ? images : [];
+
+    // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
+    const replyParams = (reply_to_id != null && reply_to_id !== '')
+      ? { reply_to_id }
+      : {};
 
     // 上限超過: Threads API を呼ばずにエラーを返す
     if (imageUrls.length > MAX_IMAGES) {
@@ -84,6 +89,7 @@ const handler = async (event) => {
         media_type: 'TEXT',
         text,
         access_token: token,
+        ...replyParams,
       });
       if (creation_id == null) {
         return errorResponse(500, 'failed to create threads container');
@@ -95,6 +101,7 @@ const handler = async (event) => {
         image_url: imageUrls[0],
         text,
         access_token: token,
+        ...replyParams,
       });
       if (creation_id == null) {
         return errorResponse(500, 'failed to create threads container');
@@ -123,6 +130,7 @@ const handler = async (event) => {
         children: childIds.join(','),
         text,
         access_token: token,
+        ...replyParams,
       });
       if (creation_id == null) {
         return errorResponse(500, 'failed to create threads carousel container');

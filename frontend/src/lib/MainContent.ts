@@ -4,7 +4,7 @@ import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
 import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
 
-export type Post = { text: string, url: string, posted_at: Date };
+export type Post = { text: string, url: string, posted_at: Date, id?: string };
 export type PresentedPost = {
   display_posted_at: string | undefined,
   trimmed_text: string,
@@ -67,6 +67,9 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
       break;
     case 'bluesky':
       promises.push(loadMyPostsBluesky().then(posts => ({ type: 'bluesky', posts })));
+      break;
+    case 'threads':
+      promises.push(loadMyPostsThreads().then(posts => ({ type: 'threads', posts })));
       break;
     }
   }
@@ -160,6 +163,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
 export const postToSns = async (text: string, imageDataURLs: string[], options: { reply_to_ids: {
   mastodon: string,
   bluesky: string,
+  threads: string,
 }}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
@@ -195,7 +199,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'threads':
-      promises.push(postToThreads(text, uploadedImageUrls).then((r) => { if (!r) errors.push('Threads') }));
+      promises.push(postToThreads(text, uploadedImageUrls, options?.reply_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
       break;
     }
 
@@ -274,7 +278,7 @@ const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: st
 };  
 
 
-const postToThreads = async (text: string, imageUrls: string[]): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string): Promise<boolean> => {
   try {
     const settings = postSettings.threads!;
 
@@ -288,6 +292,7 @@ const postToThreads = async (text: string, imageUrls: string[]): Promise<boolean
         token: settings.token_data.access_token,
         text,
         images: imageUrls,
+        reply_to_id,
       }),
     });
 
@@ -295,6 +300,31 @@ const postToThreads = async (text: string, imageUrls: string[]): Promise<boolean
   } catch (error) {
     console.error(`postToThreads -> error:`, error);
     return false;
+  }
+};
+
+const loadMyPostsThreads = async (): Promise<Post[]> => {
+  try {
+    const settings = postSettings.threads!;
+    const token = settings.token_data.access_token;
+
+    const res = await fetch(`${Config.API_ENDPOINT}/threads_posts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    if (res.ok) {
+      const resJson = await res.json();
+      return resJson;
+    } else {
+      return [];
+    }
+  } catch (error) {
+    console.error(`loadMyPostsThreads -> error:`, error);
+    return [];
   }
 };
 

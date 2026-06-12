@@ -308,6 +308,9 @@ const post = async () => {
     const res = await postToSns(text, urlsToPost, { reply_to_ids: {
       mastodon: getPostId(replyToPost?.postOfType['mastodon']?.url ?? replyToIdForMastodon),
       bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url ?? replyToIdForBluesky),
+      // Threads は permalink 末尾がショートコードで API の投稿 ID と異なるため、
+      // getPostId は使わず取得済みの id をそのまま使用する（design.md D1）
+      threads: replyToPost?.postOfType['threads']?.id ?? '',
     } });
 
     if (res.errors.length == 0) {
