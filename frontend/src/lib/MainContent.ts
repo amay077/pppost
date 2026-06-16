@@ -151,7 +151,14 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
       grouped[key].postOfType[type] = post;
     });
 
-    return Object.values(grouped);
+    // グループ内の最新投稿日時を代表値として降順ソートする
+    // （SNS ごとに連結された順のままだと Threads 分が末尾に残るため）
+    const latestPostedAt = (p: PresentedPost): number =>
+      Math.max(...Object.values(p.postOfType)
+        .filter((post): post is Post => post != null)
+        .map(post => dayjs(post.posted_at).valueOf()));
+
+    return Object.values(grouped).sort((a, b) => latestPostedAt(b) - latestPostedAt(a));
   }
   
   const result = groupByText(succeededPosts ?? []);
