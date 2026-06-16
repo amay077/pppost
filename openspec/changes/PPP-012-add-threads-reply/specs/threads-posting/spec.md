@@ -33,7 +33,9 @@ Threads のリプライ対応。本デルタは、テキスト投稿要件から
 
 取得した各投稿について、システムは Threads API の投稿 `id` を保持しなければならない (SHALL)。permalink の末尾はショートコードであり API の投稿 ID ではないため、permalink から ID を導出してはならない (SHALL NOT)。
 
-Threads の自投稿取得に失敗した場合でも、システムは Mastodon・Bluesky の自投稿候補の表示を妨げてはならない (SHALL NOT)。
+画像のみの投稿は Threads API が `text` フィールドを返さないため、システムは本文を空文字として扱わなければならず (SHALL)、`text` が欠落した投稿を候補から除外したり、処理を中断したりしてはならない (SHALL NOT)。
+
+Threads の自投稿取得に失敗した場合でも、システムは Mastodon・Bluesky の自投稿候補の表示を妨げてはならない (SHALL NOT)。また、取得の成否にかかわらず、リプライ元選択 UI がローディング表示のまま固定されてはならない (SHALL NOT)。
 
 #### Scenario: 接続済みで自投稿が候補に表示される（Own posts appear as reply candidates）
 
@@ -53,6 +55,13 @@ Threads の自投稿取得に失敗した場合でも、システムは Mastodon
 - **GIVEN** ユーザーが Threads に接続済みだが、Threads の自投稿取得が失敗する状態である
 - **WHEN** リプライ元選択 UI を展開する
 - **THEN** Mastodon・Bluesky の自投稿候補は従来通り表示される
+- **AND** リプライ元選択 UI のローディング表示は解除される
+
+#### Scenario: 画像のみの自投稿を候補に含める（Image-only post appears as candidate）
+
+- **GIVEN** ユーザーが Threads に接続済みで、本文を持たない画像のみの投稿が存在する
+- **WHEN** リプライ元選択 UI を展開する
+- **THEN** 画像のみの投稿も本文を空文字として候補に表示され、エラーで処理が中断しない
 
 ### Requirement: Threads へのリプライ投稿（Post reply to Threads）
 

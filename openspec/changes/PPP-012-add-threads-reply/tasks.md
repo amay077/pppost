@@ -43,3 +43,9 @@
 - [ ] 6.6 リプライ元未選択時に通常投稿となることを確認する
 - [ ] 6.7 Threads 未接続時に自投稿取得 API が呼ばれず、Mastodon・Bluesky の候補表示が従来通りであることを確認する
 - [ ] 6.8 Mastodon・Bluesky へのリプライ投稿が従来通り動作することを確認する
+
+## 7. リリース後の不具合修正
+
+- [x] 7.1 `threads_posts.js`: 画像のみの投稿は `text` を返さないため `text: p.text ?? ''` で空文字に正規化する（`undefined.replace` で例外になりローディングが固まる不具合の発生源）
+- [x] 7.2 `MainContent.svelte`: `onLoadMyPosts` を `try/finally` 化し、自投稿取得が失敗してもローディング表示を必ず解除する
+- [x] 7.3 `MainContent.ts`: `groupByText` の結果を各グループの最新投稿日時で降順ソートする（SNS ごとの連結順のままだと Threads 分が末尾に残る不具合）
