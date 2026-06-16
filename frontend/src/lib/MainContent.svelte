@@ -352,11 +352,14 @@ const onVersion = async () => {
   apiVer = await getApiVersion();
 }
 
-const onLoadMyPosts = async () => { 
+const onLoadMyPosts = async () => {
   myPosts = [];
   loadingMyPosts = true;
-  myPosts = await loadMyPosts();
-  loadingMyPosts = false;
+  try {
+    myPosts = await loadMyPosts();
+  } finally {
+    loadingMyPosts = false;
+  }
 }
 
 const getTypes = (post: PresentedPost) => {

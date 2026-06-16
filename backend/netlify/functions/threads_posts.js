@@ -33,7 +33,7 @@ const handler = async (event) => {
 
     const results = posts.map((p) => ({
       id: p.id,
-      text: p.text,
+      text: p.text ?? '', // 画像のみの投稿は text を返さないため空文字に正規化
       url: p.permalink,
       posted_at: p.timestamp,
     }));
