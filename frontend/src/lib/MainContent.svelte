@@ -398,8 +398,13 @@ const getTypes = (post: PresentedPost) => {
 <div class="mt-4">
 
   <div class="mb-3">
-    <span class="h5">Message:</span>
-    <textarea 
+    <div class="d-flex justify-content-between align-items-center"> <!-- Message ラベルと文字数を両端に配置 -->
+      <span class="h5">Message:</span>
+      <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
+        {tweetLength} / {TWITTER_WARN_LENGTH} 文字
+      </span>
+    </div>
+    <textarea
       class="form-control" 
       id="message" 
       rows="5" 
@@ -494,10 +499,7 @@ const getTypes = (post: PresentedPost) => {
     {/if}
 
     </div> <!-- ボタン左寄せ div 閉じタグ -->
-    <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
-      {tweetLength} / {TWITTER_WARN_LENGTH} 文字
-    </span>
-  </div> <!-- ボタンと文字数横並び div 閉じタグ -->
+  </div> <!-- ボタン横並び div 閉じタグ -->
 
 </div>
 
