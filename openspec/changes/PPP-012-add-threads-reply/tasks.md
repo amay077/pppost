@@ -30,8 +30,8 @@
 
 ## 5. スコープ検証（design.md D3）
 
-- [ ] 5.1 実機でリプライ投稿を行い、既存スコープ（`threads_basic,threads_content_publish`）で成功するか確認する
-- [ ] 5.2 権限エラーが発生した場合のみ、`ThreadsConnection.svelte` の認可 URL の `scope` に `threads_manage_replies` を追加し、再接続後にリプライ投稿が成功することを確認する
+- [x] 5.1 実機でリプライ投稿を行い、既存スコープ（`threads_basic,threads_content_publish`）で成功するか確認する → 権限エラー（`code: 10` "Application does not have permission"）が発生。通常投稿は成功するためリプライ作成には追加スコープが必要と判明
+- [x] 5.2 `ThreadsConnection.svelte` の認可 URL の `scope` に `threads_manage_replies` を追加した（`threads_basic,threads_content_publish,threads_manage_replies`）。既存ユーザーは再接続でリプライ投稿が可能になる
 
 ## 6. 動作検証
 

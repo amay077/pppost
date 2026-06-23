@@ -67,6 +67,8 @@ Threads の自投稿取得に失敗した場合でも、システムは Mastodon
 
 システムは、リプライ元として Threads の自投稿が選択されているとき、コンテナ作成（`POST /me/threads`）に `reply_to_id`（自投稿取得 API で得た投稿 `id`）を指定して、リプライとして投稿しなければならない (SHALL)。画像付きの場合も同様に、トップレベルのコンテナ（カルーセルの場合は親コンテナ）に `reply_to_id` を付与しなければならない (SHALL)。
 
+リプライ作成には Threads API の `threads_manage_replies` スコープが必要である。通常投稿に必要な `threads_content_publish` だけでは `reply_to_id` 付きコンテナ作成が権限エラー（`code: 10` "Application does not have permission"）となるため、システムは認可時に `threads_basic,threads_content_publish,threads_manage_replies` を要求しなければならない (SHALL)。
+
 リプライ元が選択されていない場合、または選択されたリプライ元グループに Threads の投稿が含まれない場合、システムは `reply_to_id` を付与せず通常投稿として処理しなければならない (SHALL)。
 
 リプライ投稿に失敗した場合、システムはエラー一覧に `Threads` を含めてユーザーへ通知しなければならない (SHALL)。
