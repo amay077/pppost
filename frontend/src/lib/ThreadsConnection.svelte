@@ -16,7 +16,7 @@
       client_id: threadsTarget.client_id,
       redirect_uri: threadsTarget.redirect_uri,
       response_type: 'code',
-      scope: 'threads_basic,threads_content_publish',
+      scope: 'threads_basic,threads_content_publish,threads_manage_replies',
       state: 'threads_callback',
     });
     const url = `https://threads.net/oauth/authorize?${params.toString()}`;
