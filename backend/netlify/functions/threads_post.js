@@ -34,6 +34,45 @@ const createContainer = async (params) => {
   return json.id;
 };
 
+// コンテナの処理完了（status=FINISHED）を待つ。完了時 true、失敗/タイムアウト時 false
+// Threads のメディアコンテナは非同期処理されるため、publish 前に FINISHED を待たないと
+// "Media Not Found"（code:24 / subcode:4279009）になる
+const waitForContainerReady = async (creation_id, token) => {
+  // Netlify 同期 Function の既定 10 秒タイムアウトに収める（1 秒間隔 × 最大 6 回）
+  const MAX_ATTEMPTS = 6;
+  const INTERVAL_MS = 1000;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const url = `${THREADS_API_BASE}/${encodeURIComponent(creation_id)}`
+      + `?fields=status,error_message&access_token=${encodeURIComponent(token)}`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      console.error(`threads container status check failed: ${res.status}`, await res.text());
+      return false;
+    }
+
+    const json = await res.json();
+    const status = json.status;
+
+    if (status === 'FINISHED') {
+      return true;
+    }
+    if (status === 'ERROR' || status === 'EXPIRED') {
+      console.error(`threads container not publishable: status=${status}`, json.error_message);
+      return false;
+    }
+
+    // IN_PROGRESS など: 次回チェックまで待機（最終試行後は待たない）
+    if (attempt < MAX_ATTEMPTS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+    }
+  }
+
+  console.error(`threads container not ready after ${MAX_ATTEMPTS} attempts: ${creation_id}`);
+  return false;
+};
+
 // creation_id を公開する。成功時 true、失敗時 false
 const publishContainer = async (creation_id, token) => {
   const res = await fetch(`${THREADS_API_BASE}/me/threads_publish`, {
@@ -135,6 +174,12 @@ const handler = async (event) => {
       if (creation_id == null) {
         return errorResponse(500, 'failed to create threads carousel container');
       }
+    }
+
+    // 公開前にコンテナの処理完了（status=FINISHED）を待つ
+    const ready = await waitForContainerReady(creation_id, token);
+    if (!ready) {
+      return errorResponse(500, 'threads container not ready');
     }
 
     // 公開

@@ -47,6 +47,27 @@ Meta OAuth 2.0 + Threads Graph API を用いた Threads アカウント接続・
 - **WHEN** 投稿ボタンを押下する
 - **THEN** エラー一覧に `Threads` が含まれ、ユーザーへ投稿失敗が通知される
 
+### Requirement: 公開前のコンテナ処理完了待ち（Wait for container readiness before publish）
+
+Threads のメディアコンテナは Meta 側で非同期に処理されるため、システムは公開（`threads_publish`）を行う前に、対象コンテナの処理状態（`GET /{creation_id}?fields=status`）が `FINISHED` になるまで待機しなければならない (SHALL)。この待機はテキスト・単画像・カルーセルのすべての投稿経路に適用される。コンテナ作成直後に待機なしで公開してはならない (SHALL NOT)（待機なしの公開は `code:24 / subcode:4279009` "Media Not Found" を引き起こすため）。
+
+`status` が `ERROR` または `EXPIRED` の場合、システムは公開を行わず、その投稿を失敗として扱わなければならない (SHALL)。`status` が一定回数のポーリング後も `FINISHED` にならない場合も、システムはその投稿を失敗として扱わなければならない (SHALL)。バックエンドの実行時間制約（Netlify Function の既定 10 秒タイムアウト）に収まるよう、ポーリングの間隔と回数は有限に制限しなければならない (SHALL)。
+
+#### Scenario: コンテナ処理完了後に公開する（Publish after container becomes FINISHED）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択し、本文を入力している
+- **AND** コンテナ作成は成功したが、作成直後の `status` は `IN_PROGRESS` である
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドは `status` を `FINISHED` まで待機してから公開（`threads_publish`）を行い、投稿が成功する
+
+#### Scenario: コンテナがエラー状態で公開されない（Container in error state is not published）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択している
+- **AND** コンテナの `status` が `ERROR` または `EXPIRED` になる状態である
+- **WHEN** 投稿ボタンを押下する
+- **THEN** 公開（`threads_publish`）は行われず、Threads 投稿が失敗として扱われる
+- **AND** エラー一覧に `Threads` が含まれ、ユーザーへ投稿失敗が通知される
+
 ### Requirement: Threads 本文の文字数上限（Threads text length limit）
 
 システムは、Threads 本文が 500 文字を超える場合、Threads への投稿を失敗として扱い、ユーザーに通知しなければならない (SHALL)。MVP では Threads 専用の文字数カウンタ表示を設けず、上限超過は Threads API のエラー応答を介して投稿失敗として扱ってよい。
