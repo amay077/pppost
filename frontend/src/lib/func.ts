@@ -58,6 +58,37 @@ export function deletePostSetting(type: SettingType) {
   localStorage.removeItem(`ppp_setting_${type}`);
 }
 
+export type PrGhostSetting = {
+  enabled: boolean,
+  intervalHours: number,
+  texts: string[],
+};
+
+export type PrGhostState = {
+  lastPostedAt: number,
+  rotationIndex: number,
+};
+
+export function savePrGhostSetting(data: PrGhostSetting) {
+  localStorage.setItem(`ppp_pr_ghost_setting`, JSON.stringify(data));
+}
+
+export function loadPrGhostSetting(): PrGhostSetting | null {
+  const text = localStorage.getItem(`ppp_pr_ghost_setting`);
+  if ((text?.length ?? 0) <= 0) return null;
+  return JSON.parse(text!);
+}
+
+export function savePrGhostState(data: PrGhostState) {
+  localStorage.setItem(`ppp_pr_ghost_state`, JSON.stringify(data));
+}
+
+export function loadPrGhostState(): PrGhostState | null {
+  const text = localStorage.getItem(`ppp_pr_ghost_state`);
+  if ((text?.length ?? 0) <= 0) return null;
+  return JSON.parse(text!);
+}
+
 export function saveMessage(data: { message: string }) {
   localStorage.setItem(`ppp_message`, JSON.stringify(data));
 }

@@ -106,7 +106,7 @@ const handler = async (event) => {
   }
 
   try {
-    const { user_id, token, text, images, reply_to_id } = JSON.parse(event.body);
+    const { user_id, token, text, images, reply_to_id, is_ghost_post } = JSON.parse(event.body);
     const imageUrls = Array.isArray(images) ? images : [];
 
     // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
@@ -114,13 +114,26 @@ const handler = async (event) => {
       ? { reply_to_id }
       : {};
 
+    let creation_id;
+
+    if (is_ghost_post === true) {
+      // ゴースト投稿: テキストのみ（media_type=TEXT）で is_ghost_post を付与
+      // Threads API の制約により画像は付与できないため imageUrls を無視する
+      creation_id = await createContainer({
+        media_type: 'TEXT',
+        text,
+        is_ghost_post: true,
+        access_token: token,
+      });
+      if (creation_id == null) {
+        return errorResponse(500, 'failed to create threads ghost container');
+      }
+    } else {
     // 上限超過: Threads API を呼ばずにエラーを返す
     if (imageUrls.length > MAX_IMAGES) {
       console.error(`threads image count exceeds maximum: ${imageUrls.length}`);
       return errorResponse(400, 'image count exceeds maximum (10)');
     }
-
-    let creation_id;
 
     if (imageUrls.length === 0) {
       // テキストのみ投稿（media_type=TEXT）
@@ -174,6 +187,7 @@ const handler = async (event) => {
       if (creation_id == null) {
         return errorResponse(500, 'failed to create threads carousel container');
       }
+    }
     }
 
     // 公開前にコンテナの処理完了（status=FINISHED）を待つ

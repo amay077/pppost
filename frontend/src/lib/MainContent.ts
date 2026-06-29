@@ -1,5 +1,5 @@
 import { Config } from "../config";
-import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting } from "./func";
+import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadPrGhostSetting, loadPrGhostState, savePrGhostState } from "./func";
 import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
 import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
@@ -213,6 +213,13 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
     await Promise.allSettled(promises);
   }
 
+  // PR ゴースト投稿の自動付与
+  // 本投稿成功の判定は「全 SNS 成功（errors.length == 0）」とは異なり、
+  // Threads が投稿対象かつ Threads 本投稿が成功している（errors に 'Threads' を含まない）ことを基準とする
+  if (enableTypes.includes('threads') && !errors.includes('Threads')) {
+    await tryPostPrGhost();
+  }
+
   if (errors.length == 0) {
     // 全てのSNSへの投稿が成功した場合のみ画像を削除
     if (uploadedImageUrls.length > 0) {
@@ -238,8 +245,40 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   }
 
   return { errors };
-};  
+};
 
+
+// PR ゴースト投稿を条件判定のうえ実行する。
+// 失敗しても本投稿の成否には影響させず（errors には積まない）、console ログのみとする。
+// 成功時のみ状態（lastPostedAt / rotationIndex）を更新する。
+const tryPostPrGhost = async (): Promise<void> => {
+  try {
+    const setting = loadPrGhostSetting();
+    if (setting == null || setting.enabled !== true || setting.texts.length <= 0) {
+      return;
+    }
+
+    const state = loadPrGhostState();
+    const lastPostedAt = state?.lastPostedAt ?? 0;
+    const rotationIndex = state?.rotationIndex ?? 0;
+
+    // 間隔判定（未投稿時 lastPostedAt=0 は常に経過とみなす）
+    if (Date.now() - lastPostedAt < setting.intervalHours * 3600_000) {
+      return;
+    }
+
+    const prText = setting.texts[rotationIndex % setting.texts.length];
+    const succeeded = await postToThreads(prText, [], undefined, { is_ghost_post: true });
+
+    if (succeeded) {
+      savePrGhostState({ lastPostedAt: Date.now(), rotationIndex: rotationIndex + 1 });
+    } else {
+      console.error('PR ghost post failed; state not updated, will retry on next main post');
+    }
+  } catch (error) {
+    console.error(`tryPostPrGhost -> error:`, error);
+  }
+};
 
 
 const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
@@ -285,7 +324,7 @@ const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: st
 };  
 
 
-const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string, options?: { is_ghost_post?: boolean }): Promise<boolean> => {
   try {
     const settings = postSettings.threads!;
 
@@ -300,6 +339,7 @@ const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: st
         text,
         images: imageUrls,
         reply_to_id,
+        is_ghost_post: options?.is_ghost_post,
       }),
     });
 
