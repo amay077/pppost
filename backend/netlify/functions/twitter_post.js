@@ -38,7 +38,7 @@ const handler = async (event) => {
         await new Promise(resolve => setTimeout(resolve, UPLOAD_DELAY_MS));
       }
 
-      // Supabase URLから画像を取得
+      // ストレージ (R2) の公開URLから画像を取得
       const res = await fetch(images[i], { method: 'GET' });
       if (!res.ok) {
         throw new Error(`Failed to fetch image ${i + 1}: ${res.status}`);

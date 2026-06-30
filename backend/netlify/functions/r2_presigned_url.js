@@ -1,4 +1,5 @@
-const { createClient } = require('@supabase/supabase-js');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
 
 const handler = async (event) => {
@@ -18,11 +19,15 @@ const handler = async (event) => {
   try {
     const { filename } = JSON.parse(event.body);
 
-    // Supabaseクライアントの初期化（サーバーサイドでのみ）
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY // service role keyを使用
-    );
+    // R2 (S3互換) クライアントの初期化（サーバーサイドでのみ）
+    const s3 = new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+    });
 
     // ユニークなファイル名を生成
     const timestamp = Date.now();
@@ -31,28 +36,20 @@ const handler = async (event) => {
     const fileName = `${timestamp}-${randomStr}.${extension}`;
     const filePath = `pppost/${fileName}`;
 
+    // PUT 時の Content-Type と署名を一致させるため、ここで決定して返す
+    const contentType = `image/${extension}`;
+
     // 署名付きアップロードURLを生成（5分間有効）
-    const { data, error } = await supabase.storage
-      .from(process.env.SUPABASE_BUCKET_NAME || 'img_tmp')
-      .createSignedUploadUrl(filePath, {
-        expiresIn: 300 // 5分
-      });
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: filePath,
+      ContentType: contentType,
+    });
+    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
 
-    if (error) {
-      console.error('Supabase presigned URL error:', error);
-      return {
-        statusCode: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({ error: error.message }),
-      };
-    }
-
-    // 公開URLも生成して返す
-    const { data: { publicUrl } } = supabase.storage
-      .from(process.env.SUPABASE_BUCKET_NAME || 'img_tmp')
-      .getPublicUrl(filePath);
+    // 公開URLを組み立てて返す（R2_PUBLIC_URL は末尾スラッシュ無しを想定）
+    const publicBase = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+    const publicUrl = `${publicBase}/${filePath}`;
 
     return {
       statusCode: 200,
@@ -60,11 +57,11 @@ const handler = async (event) => {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        uploadUrl: data.signedUrl,
-        publicUrl: publicUrl,
+      body: JSON.stringify({
+        uploadUrl,
+        publicUrl,
         path: filePath,
-        token: data.token
+        contentType,
       }),
     };
   } catch (error) {

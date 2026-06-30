@@ -1,10 +1,10 @@
 import { Config } from '../config';
 
-// 署名付きURLを使用して画像をSupabaseにアップロード
-export async function uploadImageToSupabase(base64Data: string, filename: string = 'image.png'): Promise<string | null> {
+// 署名付きURLを使用して画像をストレージ (Cloudflare R2) にアップロード
+export async function uploadImageToStorage(base64Data: string, filename: string = 'image.png'): Promise<string | null> {
   try {
     // バックエンドから署名付きURLを取得
-    const presignedRes = await fetch(`${Config.API_ENDPOINT}/supabase_presigned_url`, {
+    const presignedRes = await fetch(`${Config.API_ENDPOINT}/r2_presigned_url`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -17,27 +17,26 @@ export async function uploadImageToSupabase(base64Data: string, filename: string
       return null;
     }
 
-    const { uploadUrl, publicUrl, token } = await presignedRes.json();
+    const { uploadUrl, publicUrl, contentType } = await presignedRes.json();
 
     // Base64データをBlobに変換
     const base64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
     const byteCharacters = atob(base64);
     const byteNumbers = new Array(byteCharacters.length);
-    
+
     for (let i = 0; i < byteCharacters.length; i++) {
       byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
-    
+
     const byteArray = new Uint8Array(byteNumbers);
-    const extension = filename.split('.').pop() || 'png';
-    const blob = new Blob([byteArray], { type: `image/${extension}` });
+    const blob = new Blob([byteArray], { type: contentType });
 
     // 署名付きURLを使用してアップロード
+    // 署名生成時の ContentType と一致させる必要があるため、サーバーから受け取った contentType をそのまま使う
     const uploadRes = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': `image/${extension}`,
+        'Content-Type': contentType,
       },
       body: blob,
     });
@@ -49,19 +48,19 @@ export async function uploadImageToSupabase(base64Data: string, filename: string
 
     return publicUrl;
   } catch (error) {
-    console.error('Error uploading to Supabase:', error);
+    console.error('Error uploading to storage:', error);
     return null;
   }
 }
 
-// Supabaseから画像を削除
-export async function deleteImagesFromSupabase(urls: string[]): Promise<boolean> {
+// ストレージ (Cloudflare R2) から画像を削除
+export async function deleteImagesFromStorage(urls: string[]): Promise<boolean> {
   if (!urls || urls.length === 0) {
     return true;
   }
 
   try {
-    const response = await fetch(`${Config.API_ENDPOINT}/supabase_delete`, {
+    const response = await fetch(`${Config.API_ENDPOINT}/r2_delete`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -79,10 +78,10 @@ export async function deleteImagesFromSupabase(urls: string[]): Promise<boolean>
     if (result.errors && result.errors.length > 0) {
       console.error('Some images failed to delete:', result.errors);
     }
-    
+
     return result.success;
   } catch (error) {
-    console.error('Error deleting images from Supabase:', error);
+    console.error('Error deleting images from storage:', error);
     return false;
   }
 }

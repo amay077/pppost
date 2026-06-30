@@ -2,7 +2,7 @@ import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadPrGhostSetting, loadPrGhostState, savePrGhostState } from "./func";
 import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
-import { uploadImageToSupabase, deleteImagesFromSupabase } from "./supabase-client";
+import { uploadImageToStorage, deleteImagesFromStorage } from "./storage-client";
 
 export type Post = { text: string, url: string, posted_at: Date, id?: string };
 export type PresentedPost = {
@@ -174,7 +174,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 }}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
-  // 画像を一度だけSupabaseにアップロード
+  // 画像を一度だけストレージ (R2) にアップロード
   const uploadedImageUrls: string[] = [];
   if (imageDataURLs.length > 0) {
     for (let i = 0; i < imageDataURLs.length; i++) {
@@ -223,8 +223,8 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   if (errors.length == 0) {
     // 全てのSNSへの投稿が成功した場合のみ画像を削除
     if (uploadedImageUrls.length > 0) {
-      console.log('Deleting temporary images from Supabase...');
-      const deleteResult = await deleteImagesFromSupabase(uploadedImageUrls);
+      console.log('Deleting temporary images from storage (R2)...');
+      const deleteResult = await deleteImagesFromStorage(uploadedImageUrls);
       if (!deleteResult) {
         console.error('Failed to delete some temporary images');
       } else {
@@ -495,6 +495,6 @@ const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: str
 
 
 const uploadImage = async (content: string, filename: string = 'image.png'): Promise<string | null> => {
-  // Supabaseに直接アップロード
-  return await uploadImageToSupabase(content, filename);
+  // ストレージ (R2) に直接アップロード
+  return await uploadImageToStorage(content, filename);
 }

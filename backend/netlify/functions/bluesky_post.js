@@ -100,7 +100,7 @@ const handler = async (event) => {
         console.log(`Processing image ${i + 1}: ${imageUrl}`);
         
         try {
-          // Supabase URLから画像を取得
+          // ストレージ (R2) の公開URLから画像を取得
           const imageRes = await fetch(imageUrl);
           if (!imageRes.ok) {
             console.error(`Failed to fetch image from ${imageUrl}: ${imageRes.status}`);

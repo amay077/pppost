@@ -45,7 +45,7 @@ const handler = async (event) => {
       
       for (const imageUrl of images) {
         try {
-          // Supabase URLから画像を取得
+          // ストレージ (R2) の公開URLから画像を取得
           const imageRes = await fetch(imageUrl);
           if (!imageRes.ok) {
             console.error(`Failed to fetch image from ${imageUrl}`);
