@@ -2,7 +2,7 @@ import { Config } from "../config";
 import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadPrGhostSetting, loadPrGhostState, savePrGhostState } from "./func";
 import type { AtpSessionData } from "@atproto/api";
 import dayjs from "dayjs";
-import { uploadImageToStorage, deleteImagesFromStorage } from "./storage-client";
+import { uploadImageToStorage } from "./storage-client";
 
 export type Post = { text: string, url: string, posted_at: Date, id?: string };
 export type PresentedPost = {
@@ -221,17 +221,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   }
 
   if (errors.length == 0) {
-    // 全てのSNSへの投稿が成功した場合のみ画像を削除
-    if (uploadedImageUrls.length > 0) {
-      console.log('Deleting temporary images from storage (R2)...');
-      const deleteResult = await deleteImagesFromStorage(uploadedImageUrls);
-      if (!deleteResult) {
-        console.error('Failed to delete some temporary images');
-      } else {
-        console.log('Temporary images deleted successfully');
-      }
-    }
-
+    // 一時アップロードした画像は R2 のライフサイクルルールで自動削除される
     for (const [k, v] of Object.entries(postSettings)) {
       const type = k as SettingType;
       if (v != null) {
@@ -239,9 +229,6 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
         savePostSetting(v);
       }
     }
-  } else {
-    // エラーがある場合は画像を削除しない（再投稿の可能性があるため）
-    console.log('Post failed, keeping temporary images for retry');
   }
 
   return { errors };

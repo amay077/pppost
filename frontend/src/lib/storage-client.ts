@@ -52,36 +52,3 @@ export async function uploadImageToStorage(base64Data: string, filename: string 
     return null;
   }
 }
-
-// ストレージ (Cloudflare R2) から画像を削除
-export async function deleteImagesFromStorage(urls: string[]): Promise<boolean> {
-  if (!urls || urls.length === 0) {
-    return true;
-  }
-
-  try {
-    const response = await fetch(`${Config.API_ENDPOINT}/r2_delete`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ urls }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Failed to delete images:', error);
-      return false;
-    }
-
-    const result = await response.json();
-    if (result.errors && result.errors.length > 0) {
-      console.error('Some images failed to delete:', result.errors);
-    }
-
-    return result.success;
-  } catch (error) {
-    console.error('Error deleting images from storage:', error);
-    return false;
-  }
-}
