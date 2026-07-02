@@ -1,7 +1,22 @@
 const fetch = require('node-fetch')
+const { generateSessionId, extractSessionId } = require('../lib/session');
+const { saveToken } = require('../lib/token-store');
 
 const handler = async (event) => {
   console.log(`start handler - `, event);
+
+  // CORS対応
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      },
+      body: '',
+    };
+  }
 
   try {
     const code = event.queryStringParameters.code ?? 'empty';
@@ -50,6 +65,16 @@ const handler = async (event) => {
 
     const longJson = await longRes.json();
 
+    // セッション ID: Bearer にあれば再利用、なければ新規発行
+    const sessionId = extractSessionId(event) ?? generateSessionId();
+
+    // 長命トークンは D1 に暗号化保存し、クライアントには返さない
+    await saveToken(sessionId, 'threads', {
+      access_token: longJson.access_token,
+      token_type: longJson.token_type,
+      expires_in: longJson.expires_in,
+    }, { user_id });
+
     const response = {
       statusCode: 200,
       headers: {
@@ -57,10 +82,8 @@ const handler = async (event) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        session_id: sessionId,
         user_id,
-        access_token: longJson.access_token,
-        token_type: longJson.token_type,
-        expires_in: longJson.expires_in,
       })
     };
     console.log(`finish handler - `, response);

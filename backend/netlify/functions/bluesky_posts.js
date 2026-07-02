@@ -1,4 +1,6 @@
 const { BskyAgent } = require('@atproto/api');
+const { extractSessionId } = require('../lib/session');
+const { getToken, saveToken } = require('../lib/token-store');
 
 const bskyEndpoint = 'https://bsky.social';
 
@@ -6,7 +8,7 @@ const handler = async (event) => {
   // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
@@ -20,16 +22,24 @@ const handler = async (event) => {
   }
 
   try {
-    const { sessionData } = JSON.parse(event.body);
-    console.log('Bluesky posts request received');
+    const sessionId = extractSessionId(event);
+    if (sessionId == null) {
+      return {
+        statusCode: 401,
+        headers,
+        body: JSON.stringify({ error: 'session required' })
+      };
+    }
 
-    if (!sessionData) {
+    const stored = await getToken(sessionId, 'bluesky');
+    if (stored == null) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Session data is required' })
+        body: JSON.stringify({ error: 'bluesky token not stored' })
       };
     }
+    const sessionData = stored.token;
 
     // Bluesky Agentの初期化
     const agent = new BskyAgent({
@@ -44,6 +54,12 @@ const handler = async (event) => {
 
     // トークンリフレッシュ
     await agent.refreshSession();
+
+    // 更新されたセッションデータを D1 に書き戻す（クライアントへは返さない）
+    await saveToken(sessionId, 'bluesky', agent.session, {
+      handle: agent.session.handle,
+      did: agent.session.did,
+    });
 
     // 投稿一覧を取得
     console.log('Getting author feed...');
@@ -69,7 +85,6 @@ const handler = async (event) => {
       },
       body: JSON.stringify({
         posts,
-        sessionData: agent.session // 更新されたセッションデータを返す
       })
     };
   } catch (error) {

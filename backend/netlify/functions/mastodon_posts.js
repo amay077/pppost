@@ -1,24 +1,43 @@
 const fetch = require('node-fetch')
 const fs = require('fs');
-
-// 復号化関数
-function decrypt(encryptedText) {
-  const key = Buffer.from(process.env.PPPOST_DATA_SECRET).subarray(0, 32);
-  const iv = Buffer.from(process.env.PPPOST_DATA_IV).subarray(0, 16);
-  
-  const crypto = require('crypto');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
-}
+const { extractSessionId } = require('../lib/session');
+const { getToken } = require('../lib/token-store');
 
 const handler = async (event) => {
-  console.info(`FIXME 後で消す  -> handler -> event:`, event);
+  // CORS対応
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
+    };
+  }
 
   try {
 
-    const { host, token } = JSON.parse(event.body); // as { refresh_token: string, text: string };
+    const sessionId = extractSessionId(event);
+    if (sessionId == null) {
+      return {
+        statusCode: 401,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'session required' })
+      };
+    }
+
+    const stored = await getToken(sessionId, 'mastodon');
+    if (stored == null) {
+      return {
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'mastodon token not stored' })
+      };
+    }
+    const host = stored.meta.server;
+    const token = stored.token.access_token;
 
     // ユーザーIDを取得
     const respons = await fetch(`https://${host}/api/v1/accounts/verify_credentials`, {

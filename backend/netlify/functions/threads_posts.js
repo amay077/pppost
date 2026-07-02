@@ -1,4 +1,6 @@
 const fetch = require('node-fetch')
+const { extractSessionId } = require('../lib/session');
+const { getToken } = require('../lib/token-store');
 
 const THREADS_API_BASE = 'https://graph.threads.net/v1.0';
 
@@ -9,7 +11,7 @@ const handler = async (event) => {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
       body: '',
@@ -17,7 +19,16 @@ const handler = async (event) => {
   }
 
   try {
-    const { token } = JSON.parse(event.body);
+    const sessionId = extractSessionId(event);
+    if (sessionId == null) {
+      return { statusCode: 401, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'session required' };
+    }
+
+    const stored = await getToken(sessionId, 'threads');
+    if (stored == null) {
+      return { statusCode: 400, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'threads token not stored' };
+    }
+    const token = stored.token.access_token;
 
     // 自分の投稿一覧を取得（reply 元候補）
     const url = `${THREADS_API_BASE}/me/threads?fields=id,text,permalink,timestamp&limit=25&access_token=${encodeURIComponent(token)}`;

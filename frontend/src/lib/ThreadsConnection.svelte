@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
   import { Config } from "../config";
-  import { deletePostSetting, loadPostSetting, loadPrGhostSetting, savePrGhostSetting, type PrGhostSetting } from "./func";
+  import { deletePostSetting, loadPostSetting, loadSessionId, type PrGhostSetting } from "./func";
 
   const dispatch = createEventDispatcher<{ onChange: void }>();
 
@@ -14,14 +14,56 @@
   // PR ゴースト投稿設定（500 文字制限）
   const PR_TEXT_MAX = 500;
 
-  let prGhost: PrGhostSetting = loadPrGhostSetting() ?? {
+  // PR 設定はサーバー（D1）で管理する。接続済みならロード時に取得する。
+  let prGhost: PrGhostSetting = {
     enabled: false,
     intervalHours: 48,
     texts: [''],
   };
 
-  const persistPrGhost = () => {
-    savePrGhostSetting(prGhost);
+  const authHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const sessionId = loadSessionId();
+    if (sessionId != null) {
+      headers['Authorization'] = `Bearer ${sessionId}`;
+    }
+    return headers;
+  };
+
+  const loadPrGhost = async () => {
+    if (postSettings == null || loadSessionId() == null) return;
+    try {
+      const res = await fetch(`${Config.API_ENDPOINT}/pr_ghost_setting`, {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        prGhost = {
+          enabled: data.enabled,
+          intervalHours: data.intervalHours,
+          texts: data.texts.length > 0 ? data.texts : [''],
+        };
+      } else {
+        console.error(`failed to load pr ghost setting:`, res);
+      }
+    } catch (error) {
+      console.error(`loadPrGhost -> error:`, error);
+    }
+  };
+
+  onMount(loadPrGhost);
+
+  const persistPrGhost = async () => {
+    if (loadSessionId() == null) return;
+    try {
+      await fetch(`${Config.API_ENDPOINT}/pr_ghost_setting`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify(prGhost),
+      });
+    } catch (error) {
+      console.error(`persistPrGhost -> error:`, error);
+    }
   };
 
   const addPrText = () => {
@@ -35,6 +77,24 @@
       prGhost.texts = [''];
     }
     persistPrGhost();
+  };
+
+  const onDisconnect = async () => {
+    const sessionId = loadSessionId();
+    if (sessionId != null) {
+      try {
+        await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ sns_type: 'threads' }),
+        });
+      } catch (error) {
+        console.error(`onDisconnect -> error:`, error);
+      }
+    }
+    postSettings = null;
+    deletePostSetting('threads');
+    dispatch('onChange');
   };
 
   const onConnectToThreads = () => {
@@ -76,11 +136,7 @@
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
       <span>接続済み</span>
-      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={() => {
-        postSettings = null;
-        deletePostSetting('threads');
-        dispatch('onChange');
-      }}>切断</button>
+      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect}>切断</button>
     </div>
 
     <!-- PR ゴースト投稿設定（Threads 接続時のみ表示） -->

@@ -1,20 +1,10 @@
 const fetch = require('node-fetch');
 const sharp = require('sharp');
 const { BskyAgent, RichText } = require('@atproto/api');
+const { extractSessionId } = require('../lib/session');
+const { getToken, saveToken } = require('../lib/token-store');
 
 const bskyEndpoint = 'https://bsky.social';
-
-// 復号化関数
-function decrypt(encryptedText) {
-  const key = Buffer.from(process.env.PPPOST_DATA_SECRET).subarray(0, 32);
-  const iv = Buffer.from(process.env.PPPOST_DATA_IV).subarray(0, 16);
-  
-  const crypto = require('crypto');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
-}
 
 // 画像リサイズ共通関数
 async function resizeImageIfNeeded(imageBuffer, maxSize, context = 'Image') {
@@ -63,7 +53,7 @@ const handler = async (event) => {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
       body: '',
@@ -71,7 +61,26 @@ const handler = async (event) => {
   }
 
   try {
-    const { sessionData, text, images, reply_to_id } = JSON.parse(event.body);
+    const sessionId = extractSessionId(event);
+    if (sessionId == null) {
+      return {
+        statusCode: 401,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'session required' })
+      };
+    }
+
+    const stored = await getToken(sessionId, 'bluesky');
+    if (stored == null) {
+      return {
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'bluesky token not stored' })
+      };
+    }
+    const sessionData = stored.token;
+
+    const { text, images, reply_to_id } = JSON.parse(event.body);
     console.log('Bluesky post request:', { text, images: images?.length, reply_to_id });
 
     // Bluesky Agentの初期化
@@ -85,6 +94,12 @@ const handler = async (event) => {
 
     // トークンリフレッシュ
     await agent.refreshSession();
+
+    // 更新されたセッションデータを D1 に書き戻す（クライアントへは返さない）
+    await saveToken(sessionId, 'bluesky', agent.session, {
+      handle: agent.session.handle,
+      did: agent.session.did,
+    });
 
     // 画像処理
     const MAX_SIZE = 976560; // 976.56KB (Blueskyの実際の制限)
@@ -367,11 +382,10 @@ const handler = async (event) => {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         success: true,
         uri: postRes.uri,
         cid: postRes.cid,
-        sessionData: agent.session
       })
     };
   } catch (error) {

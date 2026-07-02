@@ -1,8 +1,18 @@
 import { Config } from "../config";
-import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadPrGhostSetting, loadPrGhostState, savePrGhostState } from "./func";
-import type { AtpSessionData } from "@atproto/api";
+import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
 import dayjs from "dayjs";
 import { uploadImageToStorage } from "./storage-client";
+
+// トークンを要する API 呼び出しに付与する共通ヘッダを組み立てる。
+// トークンはサーバー保管のため、クライアントは Bearer セッション ID のみを送る。
+const buildAuthHeaders = (contentType: string): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': contentType };
+  const sessionId = loadSessionId();
+  if (sessionId != null) {
+    headers['Authorization'] = `Bearer ${sessionId}`;
+  }
+  return headers;
+};
 
 export type Post = { text: string, url: string, posted_at: Date, id?: string };
 export type PresentedPost = {
@@ -213,12 +223,8 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
     await Promise.allSettled(promises);
   }
 
-  // PR ゴースト投稿の自動付与
-  // 本投稿成功の判定は「全 SNS 成功（errors.length == 0）」とは異なり、
-  // Threads が投稿対象かつ Threads 本投稿が成功している（errors に 'Threads' を含まない）ことを基準とする
-  if (enableTypes.includes('threads') && !errors.includes('Threads')) {
-    await tryPostPrGhost();
-  }
+  // PR ゴースト投稿の自動付与はサーバー側（threads_post）で本投稿成功時に発火するため、
+  // クライアントからは呼び出さない。
 
   if (errors.length == 0) {
     // 一時アップロードした画像は R2 のライフサイクルルールで自動削除される
@@ -235,98 +241,43 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 };
 
 
-// PR ゴースト投稿を条件判定のうえ実行する。
-// 失敗しても本投稿の成否には影響させず（errors には積まない）、console ログのみとする。
-// 成功時のみ状態（lastPostedAt / rotationIndex）を更新する。
-const tryPostPrGhost = async (): Promise<void> => {
-  try {
-    const setting = loadPrGhostSetting();
-    if (setting == null || setting.enabled !== true || setting.texts.length <= 0) {
-      return;
-    }
-
-    const state = loadPrGhostState();
-    const lastPostedAt = state?.lastPostedAt ?? 0;
-    const rotationIndex = state?.rotationIndex ?? 0;
-
-    // 間隔判定（未投稿時 lastPostedAt=0 は常に経過とみなす）
-    if (Date.now() - lastPostedAt < setting.intervalHours * 3600_000) {
-      return;
-    }
-
-    const prText = setting.texts[rotationIndex % setting.texts.length];
-    const succeeded = await postToThreads(prText, [], undefined, { is_ghost_post: true });
-
-    if (succeeded) {
-      savePrGhostState({ lastPostedAt: Date.now(), rotationIndex: rotationIndex + 1 });
-    } else {
-      console.error('PR ghost post failed; state not updated, will retry on next main post');
-    }
-  } catch (error) {
-    console.error(`tryPostPrGhost -> error:`, error);
-  }
-};
-
-
 const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
-    const settings = postSettings.mastodon!;
-    const MASTODON_HOST = settings.server;
-    const ACCESS_TOKEN = settings.token_data.access_token;
     const status = text;
 
-    // const res = await fetch(`https://${MASTODON_HOST}/api/v1/statuses`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${ACCESS_TOKEN}`,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({ status, media_ids }),
-    // });
-
+    // host / token はサーバーがセッションから復号して使用するため、クライアントは送らない
     const res = await fetch(`${Config.API_ENDPOINT}/mastodon_post`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: JSON.stringify({ 
-        host: MASTODON_HOST, 
-        token: settings.token_data.access_token, 
-        status, 
+      headers: buildAuthHeaders('text/plain'),
+      body: JSON.stringify({
+        status,
         images: imageUrls,
-        reply_to_id 
+        reply_to_id
       }),
     });
-
 
     if (res.ok) {
     } else {
       return false;
     }
-    return true;       
+    return true;
   } catch (error) {
     console.error(`postToMastodon -> error:`, error);
-    return false;       
+    return false;
   }
-};  
+};
 
 
-const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string, options?: { is_ghost_post?: boolean }): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string): Promise<boolean> => {
   try {
-    const settings = postSettings.threads!;
-
+    // トークンはサーバーがセッションから復号して使用する
     const res = await fetch(`${Config.API_ENDPOINT}/threads_post`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildAuthHeaders('application/json'),
       body: JSON.stringify({
-        user_id: settings.user_id,
-        token: settings.token_data.access_token,
         text,
         images: imageUrls,
         reply_to_id,
-        is_ghost_post: options?.is_ghost_post,
       }),
     });
 
@@ -339,15 +290,10 @@ const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: st
 
 const loadMyPostsThreads = async (): Promise<Post[]> => {
   try {
-    const settings = postSettings.threads!;
-    const token = settings.token_data.access_token;
-
     const res = await fetch(`${Config.API_ENDPOINT}/threads_posts`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token }),
+      headers: buildAuthHeaders('application/json'),
+      body: JSON.stringify({}),
     });
 
     if (res.ok) {
@@ -365,34 +311,14 @@ const loadMyPostsThreads = async (): Promise<Post[]> => {
 
 const loadMyPostsBluesky = async (): Promise<Post[]> => {
   try {
-    const sessionData = postSettings.bluesky?.data?.sessionData;
-    if (!sessionData) {
-      console.error('Bluesky session data not found');
-      return [];
-    }
-
     const res = await fetch(`${Config.API_ENDPOINT}/bluesky_posts`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ sessionData }),
+      headers: buildAuthHeaders('application/json'),
+      body: JSON.stringify({}),
     });
 
     if (res.ok) {
       const resJson = await res.json();
-      
-      // 新しいセッションデータを保存
-      if (resJson.sessionData) {
-        postSettings.bluesky = { 
-          type: 'bluesky', 
-          title: 'Bluesky', 
-          enabled: true, 
-          data: { sessionData: resJson.sessionData }
-        };
-        savePostSetting(postSettings.bluesky);
-      }
-      
       return resJson.posts || [];
     } else {
       return [];
@@ -401,52 +327,36 @@ const loadMyPostsBluesky = async (): Promise<Post[]> => {
     console.error(`loadMyPostsBluesky -> error:`, error);
     return [];
   }
-}; 
+};
 
 const loadMyPostsMastodon = async (): Promise<Post[]> => {
   try {
-    const settings = postSettings.mastodon!;
-    const host = settings.server;
-    const token = settings.token_data.access_token;
-
     const res = await fetch(`${Config.API_ENDPOINT}/mastodon_posts`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: JSON.stringify({ host, token }),
+      headers: buildAuthHeaders('text/plain'),
+      body: JSON.stringify({}),
     });
 
     if (res.ok) {
       const resJson = await res.json();
-      console.log(`FIXME 後で消す  -> loadMyPostsMastodon -> resJson:`, resJson);
       return resJson;
     } else {
       return [];
     }
   } catch (error) {
     console.error(`loadMyPostsMastodon -> error:`, error);
-    return [];       
+    return [];
   }
-};    
+};
 
 
 const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
-    const sessionData = postSettings.bluesky?.data?.sessionData;
-    if (!sessionData) {
-      console.error('Bluesky session data not found');
-      return false;
-    }
-
-    // バックエンドにリクエストを送信
+    // session データはサーバーがセッションから復号して使用する
     const res = await fetch(`${Config.API_ENDPOINT}/bluesky_post`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildAuthHeaders('application/json'),
       body: JSON.stringify({
-        sessionData,
         text,
         images: imageUrls,
         reply_to_id
@@ -456,18 +366,6 @@ const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: str
     if (res.ok) {
       const resJson = await res.json();
       console.log(`postToBluesky response:`, resJson);
-      
-      // 新しいセッションデータを保存
-      if (resJson.sessionData) {
-        postSettings.bluesky = { 
-          type: 'bluesky', 
-          title: 'Bluesky', 
-          enabled: true, 
-          data: { sessionData: resJson.sessionData }
-        };
-        savePostSetting(postSettings.bluesky);
-      }
-      
       return true;
     } else {
       const errorData = await res.json();
@@ -478,7 +376,7 @@ const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: str
     console.error(`postToBluesky -> error:`, error);
     return false;
   }
-}; 
+};
 
 
 const uploadImage = async (content: string, filename: string = 'image.png'): Promise<string | null> => {

@@ -1,4 +1,7 @@
 const fetch = require('node-fetch')
+const { extractSessionId } = require('../lib/session');
+const { getToken } = require('../lib/token-store');
+const { getPrGhostState, updatePrGhostExecState } = require('../lib/pr-ghost');
 
 const THREADS_API_BASE = 'https://graph.threads.net/v1.0';
 const MAX_IMAGES = 10;
@@ -91,48 +94,31 @@ const publishContainer = async (creation_id, token) => {
   return true;
 };
 
-const handler = async (event) => {
-  // CORS対応
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
-      body: '',
-    };
-  }
+// Threads へ 1 件投稿する。成功時 { ok: true }、失敗時 { ok: false, statusCode, error }。
+// isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
+const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) => {
+  // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
+  const replyParams = (reply_to_id != null && reply_to_id !== '')
+    ? { reply_to_id }
+    : {};
 
-  try {
-    const { user_id, token, text, images, reply_to_id, is_ghost_post } = JSON.parse(event.body);
-    const imageUrls = Array.isArray(images) ? images : [];
+  let creation_id;
 
-    // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
-    const replyParams = (reply_to_id != null && reply_to_id !== '')
-      ? { reply_to_id }
-      : {};
-
-    let creation_id;
-
-    if (is_ghost_post === true) {
-      // ゴースト投稿: テキストのみ（media_type=TEXT）で is_ghost_post を付与
-      // Threads API の制約により画像は付与できないため imageUrls を無視する
-      creation_id = await createContainer({
-        media_type: 'TEXT',
-        text,
-        is_ghost_post: true,
-        access_token: token,
-      });
-      if (creation_id == null) {
-        return errorResponse(500, 'failed to create threads ghost container');
-      }
-    } else {
+  if (isGhost === true) {
+    creation_id = await createContainer({
+      media_type: 'TEXT',
+      text,
+      is_ghost_post: true,
+      access_token: token,
+    });
+    if (creation_id == null) {
+      return { ok: false, statusCode: 500, error: 'failed to create threads ghost container' };
+    }
+  } else {
     // 上限超過: Threads API を呼ばずにエラーを返す
     if (imageUrls.length > MAX_IMAGES) {
       console.error(`threads image count exceeds maximum: ${imageUrls.length}`);
-      return errorResponse(400, 'image count exceeds maximum (10)');
+      return { ok: false, statusCode: 400, error: 'image count exceeds maximum (10)' };
     }
 
     if (imageUrls.length === 0) {
@@ -144,7 +130,7 @@ const handler = async (event) => {
         ...replyParams,
       });
       if (creation_id == null) {
-        return errorResponse(500, 'failed to create threads container');
+        return { ok: false, statusCode: 500, error: 'failed to create threads container' };
       }
     } else if (imageUrls.length === 1) {
       // 単画像投稿（media_type=IMAGE）
@@ -156,7 +142,7 @@ const handler = async (event) => {
         ...replyParams,
       });
       if (creation_id == null) {
-        return errorResponse(500, 'failed to create threads container');
+        return { ok: false, statusCode: 500, error: 'failed to create threads container' };
       }
     } else {
       // カルーセル投稿（media_type=CAROUSEL）
@@ -173,7 +159,7 @@ const handler = async (event) => {
 
       // 子コンテナのいずれか 1 つでも失敗した場合は投稿全体を失敗とする
       if (childIds.some((id) => id == null)) {
-        return errorResponse(500, 'failed to create threads child container');
+        return { ok: false, statusCode: 500, error: 'failed to create threads child container' };
       }
 
       // 親コンテナを作成
@@ -185,22 +171,99 @@ const handler = async (event) => {
         ...replyParams,
       });
       if (creation_id == null) {
-        return errorResponse(500, 'failed to create threads carousel container');
+        return { ok: false, statusCode: 500, error: 'failed to create threads carousel container' };
       }
     }
+  }
+
+  // 公開前にコンテナの処理完了（status=FINISHED）を待つ
+  const ready = await waitForContainerReady(creation_id, token);
+  if (!ready) {
+    return { ok: false, statusCode: 500, error: 'threads container not ready' };
+  }
+
+  // 公開
+  const published = await publishContainer(creation_id, token);
+  if (!published) {
+    return { ok: false, statusCode: 500, error: 'failed to publish threads' };
+  }
+
+  return { ok: true };
+};
+
+// PR ゴースト投稿を条件判定のうえサーバー側で実行する。
+// 本投稿の成否には影響させず（例外・失敗は console のみ）、成功時のみ D1 の実行状態を更新する。
+const tryPostPrGhost = async (sessionId, token) => {
+  try {
+    const state = await getPrGhostState(sessionId);
+    if (state == null || state.enabled !== true) {
+      return;
     }
 
-    // 公開前にコンテナの処理完了（status=FINISHED）を待つ
-    const ready = await waitForContainerReady(creation_id, token);
-    if (!ready) {
-      return errorResponse(500, 'threads container not ready');
+    // 空文字・空白のみの PR 文は投稿対象から除外する
+    const texts = state.texts.filter((t) => typeof t === 'string' && t.trim().length > 0);
+    if (texts.length <= 0) {
+      return;
     }
 
-    // 公開
-    const published = await publishContainer(creation_id, token);
-    if (!published) {
-      return errorResponse(500, 'failed to publish threads');
+    // 間隔判定（実行状態が未作成、または前回投稿時刻が未設定なら経過済みとみなす）
+    const elapsed = state.lastPostedAt == null
+      || (Date.now() - state.lastPostedAt >= state.intervalHours * 3600_000);
+    if (!elapsed) {
+      return;
     }
+
+    const index = state.rotationIndex % texts.length;
+    const prText = texts[index];
+
+    const result = await doThreadsPost({ token, text: prText, imageUrls: [], isGhost: true });
+    if (result.ok) {
+      await updatePrGhostExecState(sessionId, Date.now(), state.rotationIndex + 1);
+    } else {
+      console.error('PR ghost post failed; state not updated, will retry on next main post', result.error);
+    }
+  } catch (error) {
+    console.error(`tryPostPrGhost -> error:`, error);
+  }
+};
+
+const handler = async (event) => {
+  // CORS対応
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
+    };
+  }
+
+  try {
+    const sessionId = extractSessionId(event);
+    if (sessionId == null) {
+      return errorResponse(401, 'session required');
+    }
+
+    const stored = await getToken(sessionId, 'threads');
+    if (stored == null) {
+      return errorResponse(400, 'threads token not stored');
+    }
+    const token = stored.token.access_token;
+
+    const { text, images, reply_to_id } = JSON.parse(event.body);
+    const imageUrls = Array.isArray(images) ? images : [];
+
+    // 本投稿
+    const result = await doThreadsPost({ token, text, imageUrls, reply_to_id, isGhost: false });
+    if (!result.ok) {
+      return errorResponse(result.statusCode, result.error);
+    }
+
+    // 本投稿が成功したときのみ PR ゴースト投稿を試行する（失敗は本投稿に影響させない）
+    await tryPostPrGhost(sessionId, token);
 
     const response = {
       statusCode: 200,

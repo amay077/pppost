@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import { Config } from "../config";
-  import { deletePostSetting, loadPostSetting, savePostSetting } from "./func";
+  import { deletePostSetting, loadPostSetting, loadSessionId, savePostSetting, saveSessionId } from "./func";
 
   const dispatch = createEventDispatcher<{ onChange: void }>();
 
@@ -34,19 +34,45 @@
       return;
     }
 
-    const res = await fetch(`${Config.API_ENDPOINT}/mastodon_token?server=${settings.server}&code=${mastodonCode}`);
+    // 既存セッションがあれば再利用する（トークンはサーバー保管、返るのは session_id とメタのみ）
+    const existingSessionId = loadSessionId();
+    const headers: Record<string, string> = {};
+    if (existingSessionId != null) {
+      headers['Authorization'] = `Bearer ${existingSessionId}`;
+    }
+
+    const res = await fetch(`${Config.API_ENDPOINT}/mastodon_token?server=${settings.server}&code=${mastodonCode}`, { headers });
 
     if (!res.ok) {
       console.error(`failed to fetch:`, res);
       return;
     }
-    
+
     const resJson = await res.json();
-    postSettings = { type: 'mastodon', title: 'Mastodon', enabled: true, server: settings.server, token_data: resJson };
+    saveSessionId(resJson.session_id);
+    postSettings = { type: 'mastodon', title: 'Mastodon', enabled: true, server: resJson.server };
     savePostSetting(postSettings);
     dispatch('onChange');
 
     alert('Mastodon に接続しました。');
+  };
+
+  const onDisconnect = async () => {
+    const sessionId = loadSessionId();
+    if (sessionId != null) {
+      try {
+        await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId}` },
+          body: JSON.stringify({ sns_type: 'mastodon' }),
+        });
+      } catch (error) {
+        console.error(`onDisconnect -> error:`, error);
+      }
+    }
+    postSettings = null;
+    deletePostSetting('mastodon');
+    dispatch('onChange');
   };
 </script>
 
@@ -74,11 +100,7 @@
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
       <span>接続済み</span>
-      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={() => {
-        postSettings = null;
-        deletePostSetting('mastodon');
-        dispatch('onChange');
-      }}>切断</button>
+      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect}>切断</button>
     </div>
     {:else}
     <div class="d-flex flex-column gap-1">

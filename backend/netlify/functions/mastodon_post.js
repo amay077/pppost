@@ -1,18 +1,8 @@
 const fetch = require('node-fetch')
 const fs = require('fs');
 const sharp = require('sharp');
-
-// 復号化関数
-function decrypt(encryptedText) {
-  const key = Buffer.from(process.env.PPPOST_DATA_SECRET).subarray(0, 32);
-  const iv = Buffer.from(process.env.PPPOST_DATA_IV).subarray(0, 16);
-  
-  const crypto = require('crypto');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
-}
+const { extractSessionId } = require('../lib/session');
+const { getToken } = require('../lib/token-store');
 
 const handler = async (event) => {
   // CORS対応
@@ -21,21 +11,36 @@ const handler = async (event) => {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
       body: '',
     };
   }
 
-  console.info(`FIXME 後で消す  -> handler -> event:`, event);
-
   try {
 
-    const { host, token, status, media_ids, reply_to_id, images } = JSON.parse(event.body);
+    const sessionId = extractSessionId(event);
+    if (sessionId == null) {
+      return {
+        statusCode: 401,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'session required' })
+      };
+    }
 
-    // const { accessToken, accessSecret } = JSON.parse(decrypt(token));
-    // console.info(`FIXME 後で消す  -> handler -> refresh_token:`, accessToken, accessSecret);
+    const stored = await getToken(sessionId, 'mastodon');
+    if (stored == null) {
+      return {
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'mastodon token not stored' })
+      };
+    }
+    const host = stored.meta.server;
+    const token = stored.token.access_token;
+
+    const { status, media_ids, reply_to_id, images } = JSON.parse(event.body);
 
     // 画像アップロード処理
     let uploaded_media_ids = media_ids;
@@ -149,9 +154,10 @@ const handler = async (event) => {
       body: JSON.stringify({ status, media_ids: uploaded_media_ids, in_reply_to_id }),
     });         
 
-    const err = await res.text();
-    console.log(`FIXME  後で消す  -> handler -> err:`, err);
-    
+    if (!res.ok) {
+      console.error(`mastodon post failed: ${res.status}`, await res.text());
+    }
+
 
     const response = {
       statusCode: res.status,

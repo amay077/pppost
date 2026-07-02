@@ -7,7 +7,7 @@ import twitterText from "twitter-text";
 import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import ThreadsConnection from "./ThreadsConnection.svelte";
-import { loadMessage, loadPostSetting, saveMessage, savePostSetting, type SettingType } from "./func";
+import { loadMessage, loadPostSetting, loadSessionId, saveMessage, savePostSetting, saveSessionId, type SettingType } from "./func";
 import { Config } from "../config";
 import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
@@ -138,20 +138,21 @@ onMount(async () => {
     // Threads OAuth コールバック処理
     if (urlParams.get('state') === 'threads_callback' && urlParams.has('code')) {
       const code = urlParams.get('code') ?? '';
-      const res = await fetch(`${Config.API_ENDPOINT}/threads_token?code=${encodeURIComponent(code)}`);
+      // 既存セッションがあれば再利用する（トークンはサーバー保管、返るのは session_id とメタのみ）
+      const existingSessionId = loadSessionId();
+      const headers: Record<string, string> = {};
+      if (existingSessionId != null) {
+        headers['Authorization'] = `Bearer ${existingSessionId}`;
+      }
+      const res = await fetch(`${Config.API_ENDPOINT}/threads_token?code=${encodeURIComponent(code)}`, { headers });
       if (res.ok) {
         const resJson = await res.json();
+        saveSessionId(resJson.session_id);
         savePostSetting({
           type: 'threads',
           title: 'Threads',
           enabled: true,
           user_id: resJson.user_id,
-          token_data: {
-            access_token: resJson.access_token,
-            token_type: resJson.token_type,
-            expires_in: resJson.expires_in,
-            obtained_at: Date.now(),
-          },
         });
         onChangePostSettings();
       } else {
@@ -163,31 +164,19 @@ onMount(async () => {
     }
 
     // Threads 長命トークンの自動リフレッシュ
-    // 接続済みかつ取得から 24 時間以上経過している場合のみリフレッシュする
+    // リフレッシュ可否の判定・実行はサーバー側で行うため、接続済みならサーバーへ問い合わせるだけとする
     const threadsSetting = loadPostSetting('threads');
-    if (threadsSetting != null) {
-      const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-      if (Date.now() - threadsSetting.token_data.obtained_at >= REFRESH_THRESHOLD_MS) {
-        try {
-          const refreshRes = await fetch(`${Config.API_ENDPOINT}/threads_refresh?token=${encodeURIComponent(threadsSetting.token_data.access_token)}`);
-          if (refreshRes.ok) {
-            const refreshJson = await refreshRes.json();
-            savePostSetting({
-              ...threadsSetting,
-              token_data: {
-                access_token: refreshJson.access_token,
-                token_type: refreshJson.token_type,
-                expires_in: refreshJson.expires_in,
-                obtained_at: Date.now(),
-              },
-            });
-            onChangePostSettings();
-          } else {
-            console.error(`failed to refresh threads token:`, refreshRes);
-          }
-        } catch (error) {
-          console.error(`failed to refresh threads token:`, error);
+    const sessionId = loadSessionId();
+    if (threadsSetting != null && sessionId != null) {
+      try {
+        const refreshRes = await fetch(`${Config.API_ENDPOINT}/threads_refresh`, {
+          headers: { 'Authorization': `Bearer ${sessionId}` },
+        });
+        if (!refreshRes.ok) {
+          console.error(`failed to refresh threads token:`, refreshRes);
         }
+      } catch (error) {
+        console.error(`failed to refresh threads token:`, error);
       }
     }
 

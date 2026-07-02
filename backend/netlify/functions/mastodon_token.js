@@ -1,4 +1,6 @@
 const fetch = require('node-fetch')
+const { generateSessionId, extractSessionId } = require('../lib/session');
+const { saveToken } = require('../lib/token-store');
 
 const mastodonSettings = [
   process.env.PPPOST_MASTODON_CLIENT_AUTH_MASTODON_CLOUD,
@@ -13,7 +15,20 @@ const mastodonSettings = [
 
 const handler = async (event) => {
   console.log(`start handler - `, event);
-  
+
+  // CORS対応
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      },
+      body: '',
+    };
+  }
+
   try {
     const server = event.queryStringParameters.server ?? 'empty';
     const code = event.queryStringParameters.code ?? 'empty';
@@ -45,13 +60,22 @@ const handler = async (event) => {
 
     const tokenResponse = await res.json();
 
+    // セッション ID: Bearer にあれば再利用、なければ新規発行
+    const sessionId = extractSessionId(event) ?? generateSessionId();
+
+    // access_token は D1 に暗号化保存し、クライアントには返さない
+    await saveToken(sessionId, 'mastodon', tokenResponse, { server: settings.server });
+
     const response = {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(tokenResponse)
+      body: JSON.stringify({
+        session_id: sessionId,
+        server: settings.server,
+      })
     };
     console.log(`finish handler - `, response);
 

@@ -1,4 +1,6 @@
 const { BskyAgent } = require('@atproto/api');
+const { generateSessionId, extractSessionId } = require('../lib/session');
+const { saveToken } = require('../lib/token-store');
 
 const bskyEndpoint = 'https://bsky.social';
 
@@ -6,7 +8,7 @@ const handler = async (event) => {
   // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
@@ -41,6 +43,15 @@ const handler = async (event) => {
       password,
     });
 
+    // セッション ID: Bearer にあれば再利用、なければ新規発行
+    const sessionId = extractSessionId(event) ?? generateSessionId();
+
+    // session データは D1 に暗号化保存し、クライアントには返さない
+    await saveToken(sessionId, 'bluesky', agent.session, {
+      handle: agent.session.handle,
+      did: agent.session.did,
+    });
+
     return {
       statusCode: 200,
       headers: {
@@ -48,8 +59,9 @@ const handler = async (event) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        success: true,
-        sessionData: agent.session
+        session_id: sessionId,
+        handle: agent.session.handle,
+        did: agent.session.did,
       })
     };
   } catch (error) {

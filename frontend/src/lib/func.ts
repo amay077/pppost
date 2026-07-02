@@ -1,25 +1,16 @@
-import type { AtpSessionData } from "@atproto/api";
-
 export type SettingDataMastodon = {
   type: 'mastodon',
   title: 'Mastodon',
   enabled: boolean,
   server: string,
-  token_data: {
-    access_token: string,
-    token_type: string,
-    scope: string,
-    created_at: number,
-  }
 };
 
 export type SettingDataBluesky = {
   type: 'bluesky',
   title: 'Bluesky',
   enabled: boolean,
-  data: {
-    sessionData: AtpSessionData,
-  }
+  handle: string,
+  did: string,
 };
 
 export type SettingDataThreads = {
@@ -27,12 +18,6 @@ export type SettingDataThreads = {
   title: 'Threads',
   enabled: boolean,
   user_id: string,
-  token_data: {
-    access_token: string,
-    token_type: string,
-    expires_in: number,
-    obtained_at: number,
-  }
 };
 
 export type SettingData = SettingDataMastodon | SettingDataBluesky | SettingDataThreads;
@@ -58,36 +43,22 @@ export function deletePostSetting(type: SettingType) {
   localStorage.removeItem(`ppp_setting_${type}`);
 }
 
+// サーバー発行の匿名セッション ID（Bearer 認可に用いる）
+export function saveSessionId(id: string) {
+  localStorage.setItem(`ppp_session_id`, id);
+}
+
+export function loadSessionId(): string | null {
+  const id = localStorage.getItem(`ppp_session_id`);
+  return (id?.length ?? 0) > 0 ? id : null;
+}
+
+// PR ゴースト投稿設定はサーバー（D1）で管理するが、API の入出力型として利用する
 export type PrGhostSetting = {
   enabled: boolean,
   intervalHours: number,
   texts: string[],
 };
-
-export type PrGhostState = {
-  lastPostedAt: number,
-  rotationIndex: number,
-};
-
-export function savePrGhostSetting(data: PrGhostSetting) {
-  localStorage.setItem(`ppp_pr_ghost_setting`, JSON.stringify(data));
-}
-
-export function loadPrGhostSetting(): PrGhostSetting | null {
-  const text = localStorage.getItem(`ppp_pr_ghost_setting`);
-  if ((text?.length ?? 0) <= 0) return null;
-  return JSON.parse(text!);
-}
-
-export function savePrGhostState(data: PrGhostState) {
-  localStorage.setItem(`ppp_pr_ghost_state`, JSON.stringify(data));
-}
-
-export function loadPrGhostState(): PrGhostState | null {
-  const text = localStorage.getItem(`ppp_pr_ghost_state`);
-  if ((text?.length ?? 0) <= 0) return null;
-  return JSON.parse(text!);
-}
 
 export function saveMessage(data: { message: string }) {
   localStorage.setItem(`ppp_message`, JSON.stringify(data));

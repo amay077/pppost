@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { deletePostSetting, loadPostSetting, savePostSetting } from "./func";
+  import { deletePostSetting, loadPostSetting, loadSessionId, savePostSetting, saveSessionId } from "./func";
   import { createEventDispatcher } from "svelte";
   import { Config } from "../config";
 
@@ -8,18 +8,23 @@
   let expandedBluesky = false;
 
   let postSettings = loadPostSetting('bluesky');
-  let user = postSettings?.data?.sessionData?.email ?? '';
+  let user = postSettings?.handle ?? '';
   let password = '';
-  
+
   const onApplyBSkySettings = async () => {
     console.log(`onApplyBSkySettings -> user:`, user);
 
     try {
+      // 既存セッションがあれば再利用する（session データはサーバー保管、返るのは session_id とメタのみ）
+      const existingSessionId = loadSessionId();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (existingSessionId != null) {
+        headers['Authorization'] = `Bearer ${existingSessionId}`;
+      }
+
       const res = await fetch(`${Config.API_ENDPOINT}/bluesky_login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           identifier: user,
           password
@@ -34,8 +39,8 @@
       }
 
       const data = await res.json();
-      const sessionData = data.sessionData;
-      postSettings = { type: 'bluesky', title: 'Bluesky', enabled: true, data: { sessionData } };
+      saveSessionId(data.session_id);
+      postSettings = { type: 'bluesky', title: 'Bluesky', enabled: true, handle: data.handle, did: data.did };
       savePostSetting(postSettings);
       dispatch('onChange');
       alert('Bluesky に接続しました。');
@@ -43,6 +48,24 @@
       console.error(`onApplyBSkySettings -> error:`, error);
       alert('Bluesky に接続できませんでした。');
     }
+  };
+
+  const onDisconnect = async () => {
+    const sessionId = loadSessionId();
+    if (sessionId != null) {
+      try {
+        await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId}` },
+          body: JSON.stringify({ sns_type: 'bluesky' }),
+        });
+      } catch (error) {
+        console.error(`onDisconnect -> error:`, error);
+      }
+    }
+    postSettings = null;
+    deletePostSetting('bluesky');
+    dispatch('onChange');
   };
 </script>
 
@@ -67,11 +90,7 @@
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
       <span>接続済み</span>
-      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={() => {
-        postSettings = null;
-        deletePostSetting('bluesky');
-        dispatch('onChange');
-      }}>切断</button>
+      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect}>切断</button>
     </div>
     {:else}
     <div class="d-flex flex-column gap-1">
