@@ -184,8 +184,25 @@ Yahoo リアルタイム検索を利用した Twitter/X のスクレイピング
 
 ## デプロイ
 
-- Netlify へデプロイ
-- 設定は `/backend/netlify.toml` を参照
+フロントエンドとバックエンドは別々のホスティングに、いずれも `main` ブランチへの push で自動デプロイされます。
+
+### フロントエンド（GitHub Pages）
+
+- `main` への push で GitHub Actions（`.github/workflows/deploy_github_pages.yml`）が発火
+- `frontend` を `npm run build-prod` でビルドし、成果物を `publish` ブランチの `docs/` に反映 → GitHub Pages で配信
+- 本番の `VITE_*`（`VITE_API_ENDPOINT` など）は GitHub リポジトリの Actions Variables で管理
+
+### バックエンド（Netlify Functions）
+
+- Netlify の GitHub 連携により、`main` への push で自動デプロイ
+- 関数ディレクトリは `backend/netlify/functions`、設定は `/backend/netlify.toml`
+- 環境変数（各 SNS の認証情報、データ暗号化キー、Cloudflare R2 の認証情報など）は Netlify の環境変数で管理
+
+### 画像の一時ストレージ（Cloudflare R2）
+
+- 投稿画像は Cloudflare R2 に一時保存し、各 SNS へ渡したあとに削除する
+- 署名付き URL の発行・削除は `backend/netlify/functions/r2_presigned_url.js` / `r2_delete.js` が担当
+- セットアップ手順は [R2_SETUP.md](R2_SETUP.md) を参照
 
 ## 現在の制限事項
 
