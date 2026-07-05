@@ -22,7 +22,7 @@
 - `threads-posting` spec を MODIFIED:
   - `### Requirement: Threads アカウント接続` — トークンを `localStorage` でなくサーバー保管に変更、返すのは session_id とメタのみ。あわせて接続要件の scope 表記を `threads_basic,threads_content_publish,threads_manage_replies`（3 スコープ）に是正し、既存のリプライ要件（`threads_manage_replies` 必須）との latent な不整合を解消する
   - `### Requirement: Threads 長命トークンの自動リフレッシュ` — リフレッシュ判定・実行を**サーバー側**へ移管
-  - `### Requirement: PR ゴースト投稿設定の管理` / `### Requirement: PR ゴースト投稿の自動付与` — 状態・間隔判定をサーバー（D1）へ移管
+  - `### Requirement: PR ゴースト投稿設定の管理` / `### Requirement: PR ゴースト投稿の自動付与` — 状態・間隔判定をサーバー（D1）へ移管。キーはセッションではなく **Threads アカウント（`user_id`）単位**とし、別ブラウザ/別端末でも同一アカウントなら間隔ゲート・ローテーションを共有する
 - バックエンド: D1 アクセス + AES 暗号化の共通ユーティリティ、セッション発行/検証を新設。発行系 3 関数
   （`threads_token`/`mastodon_token`/`bluesky_login`）と消費系 7 関数（`threads_post`/`threads_posts`/`threads_refresh`/
   `mastodon_post`/`mastodon_posts`/`bluesky_post`/`bluesky_posts`）を改修

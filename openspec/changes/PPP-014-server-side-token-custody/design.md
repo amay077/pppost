@@ -44,6 +44,10 @@ SNS の長命トークンは一切持たない。XSS はセッション有効中
   **backend が D1 の `updated_at`/メタで判定**して実行する（クライアント起因の呼び出しを廃止、または「投稿時に必要なら更新」に集約）。
 - PPP-013 のゴースト投稿状態（`last_posted_at`/`rotation_index`）を D1 `pr_ghost_state` に移し、`now - last_posted_at >= interval` を
   **サーバーで判定**して発火。localStorage 改変で間隔ゲートを回避できないようにする。
+- **キーはセッションではなく Threads アカウント（`user_id`）**。セッションはブラウザ単位の匿名 ID であり「人物/アカウント」を
+  表さないため、セッションキーだと別ブラウザで別の間隔ゲートが走る（localStorage 時代の制約が残存する）。
+  「同じ Threads アカウントに N 時間に 1 回」という要件の意味的に正しいキーは Threads の `user_id` であり、
+  `sns_credentials` の meta に保存済みの `user_id` をサーバー内で解決して用いる（トークン保管はセッション単位のままで正しい）。
 
 ## D7. 移行
 

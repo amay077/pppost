@@ -34,6 +34,8 @@
 - [x] 6.1 PR 設定（有効/間隔/文リスト）と実行状態（`last_posted_at`/`rotation_index`）を D1 `pr_ghost_state` に保存する API を用意する
 - [x] 6.2 PR ゴースト投稿の間隔判定・ローテーション・成功時のみ状態更新を**サーバー側**で実施する
 - [x] 6.3 クライアント（`localStorage`）での間隔判定・状態保持を廃止する
+- [x] 6.4 `pr_ghost_state` のキーをセッションではなく **Threads アカウント（`user_id`）** に変更する（schema.sql / pr-ghost.js / pr_ghost_setting.js / threads_post.js。設定 API は Threads トークン未保管なら 400）
+- [ ] 6.5 D1 の `pr_ghost_state` を新キーで再作成する（`DROP TABLE pr_ghost_state` → `schema.sql` 適用。旧データはテスト値のみのため破棄し、PR 設定は UI から再保存）
 
 ## 7. フロントエンド
 
@@ -56,3 +58,4 @@
 - [ ] 9.5 ゴースト投稿間隔がサーバー判定で効き、`localStorage` 改変で回避できないことを確認
 - [x] 9.6 D1 HTTP API の疎通・エラーハンドリング（CF 側障害時に投稿が安全に失敗する）を確認（疎通・テーブル存在は確認済み。障害時挙動は実機検証時に確認）
 - [ ] 9.7 切断で当該 SNS の保管トークンのみが D1 から削除され、同一セッションの他 SNS のトークンが保持されることを確認（切断後は当該 SNS が未接続として扱われること）
+- [ ] 9.8 間隔ゲートが Threads アカウント単位で共有されることを確認（可能なら別ブラウザで同一アカウント接続し、間隔内は PR が出ないこと。最低限 D1 の `pr_ghost_state` が `threads_user_id` キーで作成されること）

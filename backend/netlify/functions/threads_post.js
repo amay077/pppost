@@ -193,9 +193,10 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
 
 // PR ゴースト投稿を条件判定のうえサーバー側で実行する。
 // 本投稿の成否には影響させず（例外・失敗は console のみ）、成功時のみ D1 の実行状態を更新する。
-const tryPostPrGhost = async (sessionId, token) => {
+// 間隔状態のキーは Threads アカウント（user_id）。セッションをまたいでゲートを共有する。
+const tryPostPrGhost = async (threadsUserId, token) => {
   try {
-    const state = await getPrGhostState(sessionId);
+    const state = await getPrGhostState(threadsUserId);
     if (state == null || state.enabled !== true) {
       return;
     }
@@ -218,7 +219,7 @@ const tryPostPrGhost = async (sessionId, token) => {
 
     const result = await doThreadsPost({ token, text: prText, imageUrls: [], isGhost: true });
     if (result.ok) {
-      await updatePrGhostExecState(sessionId, Date.now(), state.rotationIndex + 1);
+      await updatePrGhostExecState(threadsUserId, Date.now(), state.rotationIndex + 1);
     } else {
       console.error('PR ghost post failed; state not updated, will retry on next main post', result.error);
     }
@@ -263,7 +264,7 @@ const handler = async (event) => {
     }
 
     // 本投稿が成功したときのみ PR ゴースト投稿を試行する（失敗は本投稿に影響させない）
-    await tryPostPrGhost(sessionId, token);
+    await tryPostPrGhost(stored.meta.user_id, token);
 
     const response = {
       statusCode: 200,

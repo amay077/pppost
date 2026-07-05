@@ -16,11 +16,13 @@ CREATE TABLE IF NOT EXISTS sns_credentials (
 );
 
 -- PR ゴースト投稿の設定＋実行状態（間隔判定はサーバー側で行う）
+-- キーは Threads アカウント（user_id）。セッション（ブラウザ）をまたいで同一アカウントなら
+-- 間隔ゲート・ローテーションを共有する
 CREATE TABLE IF NOT EXISTS pr_ghost_state (
-  session_id     TEXT PRIMARY KEY,
-  enabled        INTEGER NOT NULL DEFAULT 0,
-  interval_hours INTEGER NOT NULL DEFAULT 48,
-  texts          TEXT,
-  last_posted_at INTEGER,
-  rotation_index INTEGER NOT NULL DEFAULT 0
+  threads_user_id TEXT PRIMARY KEY,
+  enabled         INTEGER NOT NULL DEFAULT 0,
+  interval_hours  INTEGER NOT NULL DEFAULT 48,
+  texts           TEXT,
+  last_posted_at  INTEGER,
+  rotation_index  INTEGER NOT NULL DEFAULT 0
 );

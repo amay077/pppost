@@ -1,5 +1,5 @@
 const { extractSessionId } = require('../lib/session');
-const { sessionExists } = require('../lib/token-store');
+const { getToken } = require('../lib/token-store');
 const { getPrGhostState, savePrGhostSetting } = require('../lib/pr-ghost');
 
 const DEFAULT_INTERVAL_HOURS = 48;
@@ -22,12 +22,16 @@ const handler = async (event) => {
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'session required' }) };
     }
 
-    if (!(await sessionExists(sessionId))) {
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'invalid session' }) };
+    // PR 設定は Threads アカウント（user_id）単位で管理するため、
+    // セッションに Threads トークンが保管されていることを要求し、meta から user_id を解決する
+    const stored = await getToken(sessionId, 'threads');
+    if (stored == null) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'threads token not stored' }) };
     }
+    const threadsUserId = stored.meta.user_id;
 
     if (event.httpMethod === 'GET') {
-      const state = await getPrGhostState(sessionId);
+      const state = await getPrGhostState(threadsUserId);
       const setting = state != null
         ? { enabled: state.enabled, intervalHours: state.intervalHours, texts: state.texts }
         : { enabled: false, intervalHours: DEFAULT_INTERVAL_HOURS, texts: [''] };
@@ -36,7 +40,7 @@ const handler = async (event) => {
 
     if (event.httpMethod === 'PUT') {
       const { enabled, intervalHours, texts } = JSON.parse(event.body);
-      await savePrGhostSetting(sessionId, {
+      await savePrGhostSetting(threadsUserId, {
         enabled: enabled === true,
         intervalHours: typeof intervalHours === 'number' ? intervalHours : DEFAULT_INTERVAL_HOURS,
         texts: Array.isArray(texts) ? texts : [],
