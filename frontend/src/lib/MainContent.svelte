@@ -75,6 +75,30 @@ const scrapeSwarmCheckin = async (swarmUrl: string): Promise<boolean> => {
   return handled;
 };
 
+// テキストから Swarm チェックインのスクレイピング対象 URL を解決する
+// 旧形式 (https://(ja.)?swarmapp.com/user/<uid>/checkin/<id>) はそのまま使用する。
+// 新形式 (https://app.foursquare.com/share/checkin/<id>) はコンテンツが貧弱なため、
+// ja.swarmapp.com/share/checkin/<id> に変換する（欠落する user/<uid> はリダイレクトで補完される）。
+const resolveSwarmScrapeUrl = (source: string): string | null => {
+  const swarmUserMatch = source.match(
+    /https:\/\/(ja\.)?swarmapp\.com\/user\/\d+\/checkin\/[a-zA-Z0-9]+(\?[^\s、〜～]*)?/
+  );
+  if (swarmUserMatch) {
+    return swarmUserMatch[0];
+  }
+
+  const foursquareShareMatch = source.match(
+    /https:\/\/app\.foursquare\.com\/share\/checkin\/([a-zA-Z0-9]+)(\?[^\s、〜～]*)?/
+  );
+  if (foursquareShareMatch) {
+    const checkinId = foursquareShareMatch[1];
+    const query = foursquareShareMatch[2] ? foursquareShareMatch[2] : '';
+    return `https://ja.swarmapp.com/share/checkin/${checkinId}${query}`;
+  }
+
+  return null;
+};
+
 const extractUrlOnly = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
@@ -192,18 +216,17 @@ onMount(async () => {
       queryValueUsed = url ?? '';
     }
 
-    // Swarm URLの検出と自動スクレイピング処理
+    // Swarm / Foursquare チェックイン URL の検出と自動スクレイピング処理
     // 日本語テキスト内のURLも検出（〜や、で終わる場合を考慮）
-    const swarmUrlPattern = /https:\/\/(ja\.)?swarmapp\.com\/user\/\d+\/checkin\/[a-zA-Z0-9]+(\?[^\s、〜～]*)?/;
-    const foundSwarmUrl = text.match(swarmUrlPattern);
+    const swarmScrapeUrl = resolveSwarmScrapeUrl(text);
     let swarmHandled = false;
-    
-    if (foundSwarmUrl) {
-      console.log('Swarm URL detected:', foundSwarmUrl[0]);
+
+    if (swarmScrapeUrl) {
+      console.log('Swarm URL detected:', swarmScrapeUrl);
       console.log('Original text:', text);
-      
+
       // Swarm URLをスクレイピングして投稿テキストを生成
-      swarmHandled = await scrapeSwarmCheckin(foundSwarmUrl[0]);
+      swarmHandled = await scrapeSwarmCheckin(swarmScrapeUrl);
     }
 
     if (!swarmHandled && queryValueUsed) {
