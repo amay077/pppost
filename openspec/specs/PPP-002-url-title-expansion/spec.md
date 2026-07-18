@@ -57,10 +57,17 @@ TBD - created by archiving change PPP-002-share-url-title. Update Purpose after 
 
 #### Scenario: Swarm URL の優先処理
 
-- **WHEN** URL が Swarm チェックイン URL（`https://swarmapp.com/.../checkin/...`）である
+- **WHEN** URL が Swarm チェックイン URL（`https://(ja.)?swarmapp.com/user/<user-id>/checkin/<checkin-id>`）である
 - **THEN** システムは既存の Swarm スクレイピング処理を優先する
 - **AND** タイトル取得処理をスキップする
 - **AND** Swarm スクレイピング結果を本文に使用する
+
+#### Scenario: Foursquare 新シェア形式 URL の正規化
+
+- **WHEN** URL が Foursquare の新シェア形式（`https://app.foursquare.com/share/checkin/<checkin-id>`）である
+- **THEN** システムは URL を `https://ja.swarmapp.com/share/checkin/<checkin-id>` に変換する（クエリ文字列は保持する）
+- **AND** 変換後の URL で既存の Swarm スクレイピング処理を実行する
+- **AND** 欠落する `user/<user-id>` はリダイレクトにより補完されるため、スクレイピングは正しく機能する
 
 ### Requirement: ローディング状態管理
 
