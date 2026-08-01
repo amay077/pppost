@@ -153,28 +153,42 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
     const compareLength = Math.max(10, Math.min(100, Math.floor(minLength * 0.6)));
 
     // 2パス目: グループ化
-    const grouped: { [key: string]: PresentedPost } = {};
+    // 本文が一致していても投稿時刻が離れていれば別グループとする。
+    // URL を除去した正規化により、同じ場所への再訪時のチェックイン投稿などは
+    // 内容が完全一致するため、時刻を見ないと時期の異なる投稿まで 1 つに潰れてしまう。
+    // 同一内容の複数 SNS 同時投稿は数秒〜数分差で届くため、1 時間の窓なら分裂しない。
+    const GROUP_WINDOW_MS = 60 * 60 * 1000;
+
+    // 本文キー → 時刻の異なるグループの配列
+    const buckets: { [textKey: string]: { group: PresentedPost, times: number[] }[] } = {};
 
     input.forEach(({ type, post }, index) => {
-      const key = normalizedTexts[index].substring(0, compareLength);
-      if (!grouped[key]) {
-        grouped[key] = {
-          display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
-          trimmed_text: trimText(post.text),
-          postOfType: { mastodon: undefined, bluesky: undefined, threads: undefined, misskey: undefined }
+      const textKey = normalizedTexts[index].substring(0, compareLength);
+      const postedAt = dayjs(post.posted_at).valueOf();
+      const list = buckets[textKey] ?? (buckets[textKey] = []);
+
+      let entry = list.find(e => e.times.some(t => Math.abs(t - postedAt) <= GROUP_WINDOW_MS));
+      if (entry == null) {
+        entry = {
+          group: {
+            display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
+            trimmed_text: trimText(post.text),
+            postOfType: { mastodon: undefined, bluesky: undefined, threads: undefined, misskey: undefined }
+          },
+          times: [],
         };
+        list.push(entry);
       }
-      grouped[key].postOfType[type] = post;
+      entry.times.push(postedAt);
+      entry.group.postOfType[type] = post;
     });
 
-    // グループ内の最新投稿日時を代表値として降順ソートする
-    // （SNS ごとに連結された順のままだと Threads 分が末尾に残るため）
-    const latestPostedAt = (p: PresentedPost): number =>
-      Math.max(...Object.values(p.postOfType)
-        .filter((post): post is Post => post != null)
-        .map(post => dayjs(post.posted_at).valueOf()));
-
-    return Object.values(grouped).sort((a, b) => latestPostedAt(b) - latestPostedAt(a));
+    // グループへ取り込んだ全投稿の最新日時を代表値として降順ソートする
+    // （SNS ごとに連結された順のままだと Threads 分が末尾に残るため）。
+    // postOfType は同一 SNS の後着で上書きされうるので、ソートキーには使わない。
+    return Object.values(buckets).flat()
+      .sort((a, b) => Math.max(...b.times) - Math.max(...a.times))
+      .map(e => e.group);
   }
   
   const result = groupByText(succeededPosts ?? []);
