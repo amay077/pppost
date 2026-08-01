@@ -39,3 +39,104 @@ Content-Type: application/json
   "scopes": "read write",
   "website": "https://github.com/amay077/pppost"
 }
+
+####
+
+# ---------------------------------------------------------------
+# Misskey (PPP-025)
+# ---------------------------------------------------------------
+# 接続手順:
+#   1. 任意の UUID を採番し、ブラウザで下記 URL を開いて許可する
+#      https://misskey.io/miauth/{UUID}?name=PPPOST&permission=write:notes,write:drive,read:account
+#   2. 下記 miauth check を実行してアクセストークンを得る
+#      （アプリ経由の場合は misskey_token 関数がこれを実行して D1 に保管する）
+
+# MiAuth: トークン取得（未認可なら {"ok":false} が返る）
+POST https://misskey.io/api/miauth/00000000-0000-4000-8000-000000000000/check
+Content-Type: application/json
+
+{}
+
+####
+
+# ノート作成（テキストのみ）
+POST https://misskey.io/api/notes/create
+Authorization: Bearer xxxxx
+Content-Type: application/json
+
+{
+  "text": "test note",
+  "visibility": "public"
+}
+
+####
+
+# ノート作成（画像付き・リプライ）
+# fileIds は drive/files/create の戻り値。空配列は不可のため、画像がない場合はキーごと省略する
+POST https://misskey.io/api/notes/create
+Authorization: Bearer xxxxx
+Content-Type: application/json
+
+{
+  "text": "test note with image",
+  "visibility": "public",
+  "fileIds": ["xxxxxxxxxxxxxxxx"],
+  "replyId": "yyyyyyyyyyyyyyyy"
+}
+
+####
+
+# ドライブへの画像アップロード（multipart/form-data の file フィールド）
+# REST Client では下記のようにファイルを添付する
+POST https://misskey.io/api/drive/files/create
+Authorization: Bearer xxxxx
+Content-Type: multipart/form-data; boundary=----PPPOSTBoundary
+
+------PPPOSTBoundary
+Content-Disposition: form-data; name="file"; filename="image.png"
+Content-Type: image/png
+
+< ./sample.png
+------PPPOSTBoundary--
+
+####
+
+# 自投稿一覧（リプライは含め、リノートは除外する）
+POST https://misskey.io/api/users/notes
+Authorization: Bearer xxxxx
+Content-Type: application/json
+
+{
+  "userId": "xxxxxxxxxxxxxxxx",
+  "withRenotes": false,
+  "withReplies": true,
+  "limit": 20
+}
+
+####
+
+# ---------------------------------------------------------------
+# misskey_token のホスト検証（いずれも 400 が返ること）
+# ---------------------------------------------------------------
+GET http://localhost:9000/.netlify/functions/misskey_token?host=localhost&session=c1f6d42b-468b-4fd2-8274-e58abdedef6f
+
+####
+
+GET http://localhost:9000/.netlify/functions/misskey_token?host=127.0.0.1&session=c1f6d42b-468b-4fd2-8274-e58abdedef6f
+
+####
+
+GET http://localhost:9000/.netlify/functions/misskey_token?host=169.254.169.254&session=c1f6d42b-468b-4fd2-8274-e58abdedef6f
+
+####
+
+GET http://localhost:9000/.netlify/functions/misskey_token?host=[::1]&session=c1f6d42b-468b-4fd2-8274-e58abdedef6f
+
+####
+
+GET http://localhost:9000/.netlify/functions/misskey_token?host=https://misskey.io/foo&session=c1f6d42b-468b-4fd2-8274-e58abdedef6f
+
+####
+
+# セッション識別子が UUID 形式でない（400 が返ること）
+GET http://localhost:9000/.netlify/functions/misskey_token?host=misskey.io&session=../../api/i

@@ -1,11 +1,12 @@
 # PPPOST
 
-PPPOST は、Twitter/X・Bluesky・Mastodon に一つの画面から同時投稿できるマルチプラットフォーム対応のソーシャルメディア投稿アプリケーションです。Svelte 製フロントエンドと Netlify Functions ベースのバックエンドを備えたモノレポ構成になっています。
+PPPOST は、Bluesky・Mastodon・Threads・Misskey に一つの画面から同時投稿できるマルチプラットフォーム対応のソーシャルメディア投稿アプリケーションです。Svelte 製フロントエンドと Netlify Functions ベースのバックエンドを備えたモノレポ構成になっています。
 
 ## できること
 
-- Twitter(X)・Bluesky・Mastodon (mastodon.cloud) への同時投稿  
-  ※他サーバーへの対応希望は issue で相談してください
+- Bluesky・Mastodon・Threads・Misskey への同時投稿
+  - Mastodon は環境変数で登録したサーバー（mastodon.cloud など）から選択する。他サーバーへの対応希望は issue で相談してください
+  - Misskey は MiAuth による接続で、任意のホスト（既定値 `misskey.io`）を接続時に入力できる。アプリの事前登録・環境変数の追加は不要
 
 ## 使い方
 
@@ -29,7 +30,8 @@ PPPOST は、Twitter/X・Bluesky・Mastodon に一つの画面から同時投稿
 
 - フロントエンド: Svelte 4、TypeScript、Vite 5、Bootstrap 5、@atproto/api (Bluesky 用)
 - バックエンド: Node.js サーバーレス関数、twitter-api-v2、cheerio/jsdom
-- 認証: Twitter OAuth、Mastodon トークン、Bluesky SDK
+- 認証: Mastodon OAuth (OOB)、Bluesky SDK、Threads OAuth (Meta)、Misskey MiAuth
+  - 取得したトークンはいずれもサーバー側 (Cloudflare D1) に暗号化保管し、クライアントには匿名セッション ID のみを返す
 
 ## 開発コマンド
 
@@ -145,6 +147,7 @@ exports.handler = async (event, context) => {
 - **Twitter/X**: Yahoo リアルタイム検索経由でスクレイピングするため、URL が省略形（`docs.github.com/ja/copilot/get…`）で含まれる場合がある。投稿時刻の正確な取得は不可能。
 - **Bluesky**: Bluesky SDK 経由でプレーンテキストとして取得
 - **Mastodon**: Mastodon API 経由で取得。HTML エンティティ（`&nbsp;`, `&lt;`, `&quot;` など）が含まれる場合がある
+- **Misskey**: Misskey API (`users/notes`) 経由でプレーンテキストとして取得。画像のみのノートは `text` が `null` になるため空文字として扱う
 
 ### リプライ元選択でのグループ化ロジック
 

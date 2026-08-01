@@ -7,6 +7,7 @@ import twitterText from "twitter-text";
 import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import ThreadsConnection from "./ThreadsConnection.svelte";
+import MisskeyConnection from "./MisskeyConnection.svelte";
 import { loadMessage, loadPostSetting, loadSessionId, saveMessage, savePostSetting, saveSessionId, type SettingType } from "./func";
 import { Config } from "../config";
 import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
@@ -29,6 +30,7 @@ let images: ImageData[] = []; // 新しいデータ構造の配列
 let expandedReply = false;
 let replyToIdForMastodon = '';
 let replyToIdForBluesky = '';
+let replyToIdForMisskey = '';
 let replyToPost: PresentedPost = {
   display_posted_at: undefined,
   trimmed_text: '',
@@ -36,6 +38,7 @@ let replyToPost: PresentedPost = {
     mastodon: undefined,
     bluesky: undefined,
     threads: undefined,
+    misskey: undefined,
   }
 };
 
@@ -309,10 +312,16 @@ const post = async () => {
         return '';
       }
 
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      return pathParts[pathParts.length - 1];
-    };    
+      // URL の形をとらない入力（投稿 ID の直接入力）はそのまま ID として扱う。
+      // new URL() の例外を握り潰すと post() の catch により全 SNS の投稿が無言で中断するため。
+      try {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/');
+        return pathParts[pathParts.length - 1];
+      } catch {
+        return url.trim();
+      }
+    };
   
     // 送信する画像URLリストを作成 (croppedUrlがあれば優先、なければoriginalUrl)
     const urlsToPost = images.map(img => img.croppedUrl ?? img.originalUrl);
@@ -323,11 +332,13 @@ const post = async () => {
       // Threads は permalink 末尾がショートコードで API の投稿 ID と異なるため、
       // getPostId は使わず取得済みの id をそのまま使用する（design.md D1）
       threads: replyToPost?.postOfType['threads']?.id ?? '',
+      misskey: getPostId(replyToPost?.postOfType['misskey']?.url ?? replyToIdForMisskey),
     } });
 
     if (res.errors.length == 0) {
       replyToIdForMastodon = '';
       replyToIdForBluesky = '';
+      replyToIdForMisskey = '';
       replyToPost = {
         display_posted_at: undefined,
         trimmed_text: '',
@@ -335,6 +346,7 @@ const post = async () => {
           mastodon: undefined,
           bluesky: undefined,
           threads: undefined,
+          misskey: undefined,
         }
       };
       posted = true;
@@ -354,6 +366,7 @@ const onChangePostSettings = () => {
   postSettings.mastodon = loadPostSetting('mastodon');
   postSettings.bluesky = loadPostSetting('bluesky');
   postSettings.threads = loadPostSetting('threads');
+  postSettings.misskey = loadPostSetting('misskey');
 
   Object.entries(postTo).forEach(([k, v]) => {
     postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
@@ -405,6 +418,12 @@ const getTypes = (post: PresentedPost) => {
       <ThreadsConnection on:onChange={onChangePostSettings} />
     </div>
   </div>
+  <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
+    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.misskey} id="misskey" disabled={postSettings.misskey == null}>
+    <div class="w-100">
+      <MisskeyConnection on:onChange={onChangePostSettings} />
+    </div>
+  </div>
 </div>
 
 <div class="mt-4">
@@ -447,6 +466,9 @@ const getTypes = (post: PresentedPost) => {
       {#if postSettings.threads != null && postTo.threads}
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="16" height="16"><path fill="currentColor" d="M141.537 88.988a66.667 66.667 0 0 0-2.518-1.143c-1.482-27.307-16.403-42.94-41.457-43.1h-.34c-14.986 0-27.449 6.396-35.12 18.036l13.779 9.452c5.73-8.695 14.724-10.548 21.348-10.548h.229c8.249.053 14.474 2.452 18.503 7.129 2.932 3.405 4.893 8.111 5.864 14.05-7.314-1.243-15.224-1.626-23.68-1.14-23.82 1.371-39.134 15.264-38.105 34.568.522 9.792 5.4 18.216 13.735 23.719 7.047 4.652 16.124 6.927 25.557 6.412 12.458-.683 22.231-5.436 29.049-14.127 5.178-6.6 8.453-15.153 9.899-25.93 5.937 3.583 10.337 8.298 12.767 13.966 4.132 9.635 4.373 25.468-8.546 38.376-11.319 11.308-24.925 16.2-45.488 16.351-22.809-.169-40.06-7.484-51.275-21.742C35.236 139.966 29.808 120.682 29.605 96c.203-24.682 5.63-43.966 16.133-57.317C56.954 24.425 74.204 17.11 97.013 16.94c22.975.17 40.526 7.52 52.171 21.847 5.71 7.026 10.015 15.86 12.853 26.162l16.147-4.308c-3.44-12.68-8.853-23.606-16.219-32.668C147.036 9.607 124.999.195 97.07 0h-.113C69.087.194 47.295 9.642 32.32 28.08 18.994 44.485 12.12 67.315 11.89 95.932L11.89 96l.001.067c.23 28.617 7.104 51.448 20.43 67.853C47.295 182.358 69.087 191.806 96.957 192h.113c24.78-.172 42.236-6.652 56.61-21.019 18.806-18.788 18.24-42.343 12.05-56.78-4.441-10.359-12.91-18.769-24.493-24.319l.3.106Z"/></svg>
       {/if}
+      {#if postSettings.misskey != null && postTo.misskey}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8.91076 16.8915c-1.03957.0038-1.93213-.6294-2.35267-1.366-.22516-.3217-.66989-.4364-.6761 0v2.0148c0 .8094-.29152 1.5097-.87581 2.1002-.56755.573-1.25977.8595-2.0779.8595-.80014 0-1.49298-.2865-2.07727-.8601C.28408 19.05 0 18.3497 0 17.5403V6.45968c0-.62378.17553-1.18863.52599-1.69455.36657-.52284.83426-.88582 1.4018-1.08769a2.84574 2.84574 0 0 1 1.00049-.17742c.90125 0 1.65239.35421 2.25281 1.06262l2.99713 3.51572c.06699.05016.263.43696.73192.43696.47016 0 .6916-.3868.75796-.43758l2.9717-3.5151c.6178-.70841 1.377-1.06262 2.2782-1.06262.3337 0 .6675.05893 1.0012.17742.5669.20187 1.0259.56422 1.377 1.08769.3665.50592.5501 1.07077.5501 1.69455V17.5403c0 .8094-.2915 1.5097-.8758 2.1002-.5675.573-1.2604.8595-2.0779.8595-.8008 0-1.493-.2865-2.0779-.8601-.5669-.5899-.8504-1.2902-.8504-2.0996v-2.0148c-.0496-.5499-.5303-.2032-.7009 0-.4503.8431-1.31369 1.3616-2.35264 1.366ZM21.447 8.60998c-.7009 0-1.3015-.24449-1.8019-.73348-.4838-.50571-.7257-1.11277-.7257-1.82118s.2419-1.30711.7257-1.79611c.5004-.50571 1.101-.75856 1.8019-.75856.7009 0 1.3017.25285 1.8025.75856.5003.489.7505 1.0877.7505 1.79611 0 .70841-.2502 1.31547-.7505 1.82118-.5008.48899-1.1016.73348-1.8025.73348Zm.0248.50655c.7009 0 1.2935.25285 1.7777.75856.5003.50571.7505 1.11301.7505 1.82181v6.2484c0 .7084-.2502 1.3155-.7505 1.8212-.4838.489-1.0764.7335-1.7777.7335-.7005 0-1.3011-.2445-1.8019-.7335-.5003-.5057-.7505-1.1128-.7505-1.8212v-6.2484c0-.7084.2502-1.3157.7505-1.82181.5004-.50571 1.101-.75856 1.8019-.75856Z"/></svg>
+      {/if}
       <span>Post</span>
     </div>
     {/if}
@@ -458,6 +480,7 @@ const getTypes = (post: PresentedPost) => {
     images = []; // 画像データをクリア
     replyToIdForMastodon = '';
     replyToIdForBluesky = '';
+    replyToIdForMisskey = '';
     replyToPost = {
       display_posted_at: undefined,
       trimmed_text: '',
@@ -465,6 +488,7 @@ const getTypes = (post: PresentedPost) => {
         mastodon: undefined,
         bluesky: undefined,
         threads: undefined,
+        misskey: undefined,
       }
     };
     posted = false;
@@ -573,6 +597,13 @@ const getTypes = (post: PresentedPost) => {
   <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
     <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 -3.268 64 68.414" width="16" height="16"><path fill="currentColor" d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>
     <input class="form-control" type="text" placeholder="Post URL or ID" bind:value={replyToIdForBluesky}  />
+  </div>
+  {/if}
+
+  {#if postSettings.misskey != null && postTo.misskey}
+  <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
+    <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8.91076 16.8915c-1.03957.0038-1.93213-.6294-2.35267-1.366-.22516-.3217-.66989-.4364-.6761 0v2.0148c0 .8094-.29152 1.5097-.87581 2.1002-.56755.573-1.25977.8595-2.0779.8595-.80014 0-1.49298-.2865-2.07727-.8601C.28408 19.05 0 18.3497 0 17.5403V6.45968c0-.62378.17553-1.18863.52599-1.69455.36657-.52284.83426-.88582 1.4018-1.08769a2.84574 2.84574 0 0 1 1.00049-.17742c.90125 0 1.65239.35421 2.25281 1.06262l2.99713 3.51572c.06699.05016.263.43696.73192.43696.47016 0 .6916-.3868.75796-.43758l2.9717-3.5151c.6178-.70841 1.377-1.06262 2.2782-1.06262.3337 0 .6675.05893 1.0012.17742.5669.20187 1.0259.56422 1.377 1.08769.3665.50592.5501 1.07077.5501 1.69455V17.5403c0 .8094-.2915 1.5097-.8758 2.1002-.5675.573-1.2604.8595-2.0779.8595-.8008 0-1.493-.2865-2.0779-.8601-.5669-.5899-.8504-1.2902-.8504-2.0996v-2.0148c-.0496-.5499-.5303-.2032-.7009 0-.4503.8431-1.31369 1.3616-2.35264 1.366ZM21.447 8.60998c-.7009 0-1.3015-.24449-1.8019-.73348-.4838-.50571-.7257-1.11277-.7257-1.82118s.2419-1.30711.7257-1.79611c.5004-.50571 1.101-.75856 1.8019-.75856.7009 0 1.3017.25285 1.8025.75856.5003.489.7505 1.0877.7505 1.79611 0 .70841-.2502 1.31547-.7505 1.82118-.5008.48899-1.1016.73348-1.8025.73348Zm.0248.50655c.7009 0 1.2935.25285 1.7777.75856.5003.50571.7505 1.11301.7505 1.82181v6.2484c0 .7084-.2502 1.3155-.7505 1.8212-.4838.489-1.0764.7335-1.7777.7335-.7005 0-1.3011-.2445-1.8019-.7335-.5003-.5057-.7505-1.1128-.7505-1.8212v-6.2484c0-.7084.2502-1.3157.7505-1.82181.5004-.50571 1.101-.75856 1.8019-.75856Z"/></svg>
+    <input class="form-control" type="text" placeholder="Note URL or ID" bind:value={replyToIdForMisskey}  />
   </div>
   {/if}
   {/if}

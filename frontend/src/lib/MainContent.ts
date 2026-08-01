@@ -1,5 +1,5 @@
 import { Config } from "../config";
-import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
+import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
 import dayjs from "dayjs";
 import { uploadImageToStorage } from "./storage-client";
 
@@ -40,16 +40,19 @@ export const postSettings: {
   mastodon: SettingDataMastodon | null,
   bluesky: SettingDataBluesky | null,
   threads: SettingDataThreads | null,
+  misskey: SettingDataMisskey | null,
 } = {
   mastodon: loadPostSetting('mastodon'),
   bluesky: loadPostSetting('bluesky'),
   threads: loadPostSetting('threads'),
+  misskey: loadPostSetting('misskey'),
 };
 
 export const postTo: { [K in SettingType]: boolean } = {
   mastodon: postSettings?.mastodon?.enabled ?? false,
   bluesky: postSettings?.bluesky?.enabled ?? false,
   threads: postSettings?.threads?.enabled ?? false,
+  misskey: postSettings?.misskey?.enabled ?? false,
 };
 
 export async function getApiVersion(): Promise<{ build_at: string, env_ver: string }> {
@@ -80,6 +83,9 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
       break;
     case 'threads':
       promises.push(loadMyPostsThreads().then(posts => ({ type: 'threads', posts })));
+      break;
+    case 'misskey':
+      promises.push(loadMyPostsMisskey().then(posts => ({ type: 'misskey', posts })));
       break;
     }
   }
@@ -155,7 +161,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
         grouped[key] = {
           display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
           trimmed_text: trimText(post.text),
-          postOfType: { mastodon: undefined, bluesky: undefined, threads: undefined }
+          postOfType: { mastodon: undefined, bluesky: undefined, threads: undefined, misskey: undefined }
         };
       }
       grouped[key].postOfType[type] = post;
@@ -181,6 +187,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   mastodon: string,
   bluesky: string,
   threads: string,
+  misskey: string,
 }}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
@@ -217,6 +224,9 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       break;
     case 'threads':
       promises.push(postToThreads(text, uploadedImageUrls, options?.reply_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
+      break;
+    case 'misskey':
+      promises.push(postToMisskey(text, uploadedImageUrls, options?.reply_to_ids?.misskey).then((r) => { if (!r) errors.push('Misskey') }));
       break;
     }
 
@@ -264,6 +274,47 @@ const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: st
   } catch (error) {
     console.error(`postToMastodon -> error:`, error);
     return false;
+  }
+};
+
+
+const postToMisskey = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
+  try {
+    // host / token はサーバーがセッションから復号して使用するため、クライアントは送らない
+    const res = await fetch(`${Config.API_ENDPOINT}/misskey_post`, {
+      method: 'POST',
+      headers: buildAuthHeaders('application/json'),
+      body: JSON.stringify({
+        text,
+        images: imageUrls,
+        reply_to_id
+      }),
+    });
+
+    return res.ok;
+  } catch (error) {
+    console.error(`postToMisskey -> error:`, error);
+    return false;
+  }
+};
+
+const loadMyPostsMisskey = async (): Promise<Post[]> => {
+  try {
+    const res = await fetch(`${Config.API_ENDPOINT}/misskey_posts`, {
+      method: 'POST',
+      headers: buildAuthHeaders('application/json'),
+      body: JSON.stringify({}),
+    });
+
+    if (res.ok) {
+      const resJson = await res.json();
+      return resJson;
+    } else {
+      return [];
+    }
+  } catch (error) {
+    console.error(`loadMyPostsMisskey -> error:`, error);
+    return [];
   }
 };
 
