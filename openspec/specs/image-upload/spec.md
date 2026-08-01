@@ -1,7 +1,7 @@
 # image-upload Specification
 
 ## Purpose
-各 SNS への画像アップロード時に、API のファイルサイズ上限を超えないよう自動リサイズする機能。
+Mastodon への画像アップロード時に、API のファイルサイズ上限（5 MB）を超えないよう自動リサイズする機能。他の投稿先（Bluesky・Threads・Misskey）のリサイズ要否は各 capability で規定し、本 capability の対象外とする。
 ## Requirements
 ### Requirement: Mastodon image auto-resize（Mastodon 画像の自動リサイズ）
 

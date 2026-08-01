@@ -89,29 +89,29 @@
 - [x] 10.1 `README.md` の投稿先一覧・アーキテクチャ説明に Misskey を追記する
 - [x] 10.2 `backend/test.http` に Misskey の手動確認用リクエスト（`miauth check`、`notes/create`、`drive/files/create`）を追記する
 - [x] 10.3 環境変数の追加が不要であることを確認する（`backend/.env.example` / `frontend/.env` / `.github/workflows/deploy_github_pages.yml` を変更しない）
-- [ ] 10.4 archive 時に `openspec/specs/sns-posting/spec.md` の `## Purpose` を「投稿対象は Mastodon・Bluesky・Threads・Misskey とし、Twitter (X) はフロントエンドから廃除する」へ手動で書き換える。OpenSpec の archive は `## Requirements` セクションのみを差し替え、Purpose を含む前段の本文は原文のまま残すため、放置すると MODIFIED した要件と Purpose が spec 内で矛盾する
-- [ ] 10.5 archive 時に `openspec/specs/misskey-posting/spec.md` の `## Purpose` を、本 change の delta 冒頭 `## Overview` の内容で置き換える（archive が自動生成する `TBD - created by archiving change ...` を残さない）
-- [ ] 10.6 archive 時に `openspec/specs/image-upload/spec.md` の `## Purpose` を「Mastodon への画像アップロード時に、API のファイルサイズ上限を超えないよう自動リサイズする機能」へ限定する。現行の「各 SNS への画像アップロード時に…」という一般化された記述は、Misskey にリサイズを適用しない本 change の方針（`design.md` D7）と読み合わせると誤解を招くため（要件本文は Mastodon 限定のままで変更不要）
+- [x] 10.4 archive 時に `openspec/specs/sns-posting/spec.md` の `## Purpose` を「投稿対象は Mastodon・Bluesky・Threads・Misskey とし、Twitter (X) はフロントエンドから廃除する」へ手動で書き換える。OpenSpec の archive は `## Requirements` セクションのみを差し替え、Purpose を含む前段の本文は原文のまま残すため、放置すると MODIFIED した要件と Purpose が spec 内で矛盾する
+- [x] 10.5 archive 時に `openspec/specs/misskey-posting/spec.md` の `## Purpose` を、本 change の delta 冒頭 `## Overview` の内容で置き換える（archive が自動生成する `TBD - created by archiving change ...` を残さない）
+- [x] 10.6 archive 時に `openspec/specs/image-upload/spec.md` の `## Purpose` を「Mastodon への画像アップロード時に、API のファイルサイズ上限を超えないよう自動リサイズする機能」へ限定する。現行の「各 SNS への画像アップロード時に…」という一般化された記述は、Misskey にリサイズを適用しない本 change の方針（`design.md` D7）と読み合わせると誤解を招くため（要件本文は Mastodon 限定のままで変更不要）
 
 ## 11. 動作検証
 
 - [x] 11.1 `cd frontend && npm run check` が型エラーなく成功することを確認する（特に `SettingDataType` への `misskey` 分岐追加漏れ）
 - [x] 11.2 `cd frontend && npm run build` が成功することを確認する
-- [ ] 11.3 接続ボタン → MiAuth で許可 → 接続完了で「接続済み」表示になることを確認する
-- [ ] 11.4 D1 に `sns_type='misskey'` の行が作られ、`enc_token` が平文でないことを確認する（`npx wrangler d1 execute pppost --remote --command "SELECT session_id, sns_type, updated_at FROM sns_credentials WHERE sns_type='misskey'"`）
-- [ ] 11.5 MiAuth で許可する前に「接続を完了」を押した場合、接続済みにならずエラーが通知されることを確認する
-- [ ] 11.6 Misskey チェックボックス ON でテキスト投稿が成功することを確認する
-- [ ] 11.7 画像 2 枚を添付した投稿が成功し、ノートに画像が付くことを確認する
-- [ ] 11.8 リプライ元選択 UI に Misskey の自投稿が表示され、選択して返信できることを確認する
-- [ ] 11.9 リプライ手動入力欄に `https://misskey.io/notes/xxxx` を貼って返信できることを確認する
-- [ ] 11.10 リプライ手動入力欄に URL ではないノート ID（`xxxx` の部分のみ）を貼って返信できること、および他 SNS を同時選択していても投稿処理が中断しないことを確認する（3.8 の `getPostId` 堅牢化の裏取り）
-- [ ] 11.11 切断後にチェックボックスが無効化され、D1 の該当行が削除されることを確認する
-- [ ] 11.12 Mastodon・Bluesky・Threads への投稿が従来通り動作することを確認する（同時投稿を含む。リプライ手動入力欄への URL 入力・裸の ID 入力の双方を含める）
-- [ ] 11.13 バックエンドに `host=localhost`・`host=127.0.0.1`・`host=169.254.169.254`・`host=[::1]`・`host=https://misskey.io/foo` を渡した場合、いずれも外部要求が行われず 400 になることを確認する（`backend/test.http` から実行）
-- [ ] 11.14 `session` に UUID 形式でない値（`../../api/i` 等）を渡した場合、Misskey インスタンスへ要求されず 400 になることを確認する
+- [x] 11.3 接続ボタン → MiAuth で許可 → 接続完了で「接続済み」表示になることを確認する
+- [x] 11.4 D1 に `sns_type='misskey'` の行が作られ、`enc_token` が平文でないことを確認する（`npx wrangler d1 execute pppost --remote --command "SELECT session_id, sns_type, updated_at FROM sns_credentials WHERE sns_type='misskey'"`）
+- [x] 11.5 MiAuth で許可する前に「接続を完了」を押した場合、接続済みにならずエラーが通知されることを確認する
+- [x] 11.6 Misskey チェックボックス ON でテキスト投稿が成功することを確認する
+- [x] 11.7 画像 2 枚を添付した投稿が成功し、ノートに画像が付くことを確認する
+- [x] 11.8 リプライ元選択 UI に Misskey の自投稿が表示され、選択して返信できることを確認する
+- [x] 11.9 リプライ手動入力欄に `https://misskey.io/notes/xxxx` を貼って返信できることを確認する
+- [x] 11.10 リプライ手動入力欄に URL ではないノート ID（`xxxx` の部分のみ）を貼って返信できること、および他 SNS を同時選択していても投稿処理が中断しないことを確認する（3.8 の `getPostId` 堅牢化の裏取り）
+- [x] 11.11 切断後にチェックボックスが無効化され、D1 の該当行が削除されることを確認する
+- [x] 11.12 Mastodon・Bluesky・Threads への投稿が従来通り動作することを確認する（同時投稿を含む。リプライ手動入力欄への URL 入力・裸の ID 入力の双方を含める）
+- [x] 11.13 バックエンドに `host=localhost`・`host=127.0.0.1`・`host=169.254.169.254`・`host=[::1]`・`host=https://misskey.io/foo` を渡した場合、いずれも外部要求が行われず 400 になることを確認する（`backend/test.http` から実行）
+- [x] 11.14 `session` に UUID 形式でない値（`../../api/i` 等）を渡した場合、Misskey インスタンスへ要求されず 400 になることを確認する
 - [ ] 11.15 画像 2 枚のうち 1 枚のアップロードを失敗させた場合（不正な画像 URL を渡す等）に、Misskey にノートが作成されないこと、およびエラー一覧に `Misskey` が含まれることを確認する
 - [ ] 11.16 Misskey の自投稿取得が失敗する状態（トークンを D1 から削除する等）で、リプライ元選択 UI のローディングが解除され、Mastodon・Bluesky・Threads の候補が従来通り表示されることを確認する
-- [ ] 11.17 3000 文字を超える本文で投稿し、Misskey のみ失敗してエラー一覧に `Misskey` が表示されることを確認する（他の選択中 SNS の投稿は妨げられないこと）
-- [ ] 11.18 `misskey.io` 以外のインスタンス（テスト用アカウントを持つ任意のホスト）を入力し、環境変数の追加や再デプロイなしに接続・投稿できることを確認する
-- [ ] 11.19 画像なしのテキストのみ投稿で、`notes/create` のリクエストボディに `fileIds` が含まれないことを確認する（バックエンドのログまたは `backend/test.http` で確認）
-- [ ] 11.20 Misskey のリプライ元候補に自分のリプライが含まれ、リノートが含まれないことを確認する（8.3 の `withReplies: true` / `withRenotes: false` の裏取り）
+- [x] 11.17 3000 文字を超える本文で投稿し、Misskey のみ失敗してエラー一覧に `Misskey` が表示されることを確認する（他の選択中 SNS の投稿は妨げられないこと）
+- [x] 11.18 `misskey.io` 以外のインスタンス（テスト用アカウントを持つ任意のホスト）を入力し、環境変数の追加や再デプロイなしに接続・投稿できることを確認する
+- [x] 11.19 画像なしのテキストのみ投稿で、`notes/create` のリクエストボディに `fileIds` が含まれないことを確認する（バックエンドのログまたは `backend/test.http` で確認）
+- [x] 11.20 Misskey のリプライ元候補に自分のリプライが含まれ、リノートが含まれないことを確認する（8.3 の `withReplies: true` / `withRenotes: false` の裏取り）
