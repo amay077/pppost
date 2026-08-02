@@ -61,20 +61,20 @@ const handler = async (event) => {
     }
 
     // 画像アップロード処理（misskey.io の上限は 500 MB のためリサイズは行わない）
+    // 1 枚あたり 10 秒近くかかるため、直列だと 3 枚で Netlify Function の
+    // 実行時間上限（30 秒）を超える。並列化して枚数に比例しないようにする。
     const fileIds = [];
 
     if (hasImages) {
-      for (const imageUrl of images) {
+      const startedAt = Date.now();
+
+      const results = await Promise.all(images.map(async (imageUrl) => {
         try {
           // ストレージ (R2) の公開URLから画像を取得
           const imageRes = await fetch(imageUrl);
           if (!imageRes.ok) {
             console.error(`Failed to fetch image from ${imageUrl}`);
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({ error: 'Failed to fetch image' })
-            };
+            return { ok: false, statusCode: 400, error: 'Failed to fetch image' };
           }
 
           const imageBuffer = await imageRes.buffer();
@@ -98,24 +98,31 @@ const handler = async (event) => {
 
           if (!uploadRes.ok) {
             console.error(`Failed to upload image to Misskey:`, uploadRes.status, await uploadRes.text());
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({ error: 'Failed to upload image to Misskey' })
-            };
+            return { ok: false, statusCode: 400, error: 'Failed to upload image to Misskey' };
           }
 
           const uploadData = await uploadRes.json();
-          fileIds.push(uploadData.id);
+          return { ok: true, id: uploadData.id };
         } catch (error) {
           console.error(`Error processing image:`, error);
-          return {
-            statusCode: 500,
-            headers,
-            body: JSON.stringify({ error: 'Image processing error' })
-          };
+          return { ok: false, statusCode: 500, error: 'Image processing error' };
         }
+      }));
+
+      console.info(`misskey drive upload: ${images.length} image(s) in ${Date.now() - startedAt} ms`);
+
+      // 1 枚でも失敗したらノートは作成しない
+      const failed = results.find(r => !r.ok);
+      if (failed != null) {
+        return {
+          statusCode: failed.statusCode,
+          headers,
+          body: JSON.stringify({ error: failed.error })
+        };
       }
+
+      // Promise.all は入力順に解決するため、添付順は保たれる
+      fileIds.push(...results.map(r => r.id));
     }
 
     // fileIds は空配列を受け付けないため、画像がある場合のみ含める
