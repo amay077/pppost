@@ -6,6 +6,16 @@ const { getPrGhostState, updatePrGhostExecState } = require('../lib/pr-ghost');
 const THREADS_API_BASE = 'https://graph.threads.net/v1.0';
 const MAX_IMAGES = 10;
 
+// Netlify 同期 Function の実行時間制限（10 秒）に対する全体予算。
+// 1 回の呼び出し（本投稿 + PR ゴースト投稿）でこの予算を使い切る。
+const OVERALL_BUDGET_MS = 8500;
+// カルーセル子コンテナの完了待ちに割り当てる上限（親作成・親待ち・公開の分を残す）
+const CHILD_WAIT_BUDGET_MS = 5000;
+// PR ゴースト投稿を試行するために必要な残り時間
+const GHOST_MIN_BUDGET_MS = 2000;
+// コンテナ状態のポーリング間隔
+const POLL_INTERVAL_MS = 500;
+
 const errorResponse = (statusCode, error) => ({
   statusCode,
   headers: {
@@ -15,7 +25,8 @@ const errorResponse = (statusCode, error) => ({
 });
 
 // メディアコンテナを作成し creation_id を返す。失敗時は null を返す
-const createContainer = async (params) => {
+// label は失敗時のログで作成段階（text / image / carousel-item / carousel / ghost）を識別するために使う
+const createContainer = async (params, label) => {
   const body = Object.entries(params)
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
     .join('&');
@@ -29,7 +40,7 @@ const createContainer = async (params) => {
   });
 
   if (!res.ok) {
-    console.error(`threads container creation failed: ${res.status}`, await res.text());
+    console.error(`threads container creation failed [${label}]: ${res.status}`, await res.text());
     return null;
   }
 
@@ -37,15 +48,15 @@ const createContainer = async (params) => {
   return json.id;
 };
 
-// コンテナの処理完了（status=FINISHED）を待つ。完了時 true、失敗/タイムアウト時 false
+// コンテナの処理完了（status=FINISHED）を待つ。完了時 true、失敗/予算切れ時 false
 // Threads のメディアコンテナは非同期処理されるため、publish 前に FINISHED を待たないと
-// "Media Not Found"（code:24 / subcode:4279009）になる
-const waitForContainerReady = async (creation_id, token) => {
-  // Netlify 同期 Function の既定 10 秒タイムアウトに収める（1 秒間隔 × 最大 6 回）
-  const MAX_ATTEMPTS = 6;
-  const INTERVAL_MS = 1000;
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+// "Media Not Found"（code:24 / subcode:4279009）になる。
+// カルーセルでは親コンテナ作成前に各子コンテナの完了も待つ必要がある（待たないと
+// "Invalid Carousel Children"（code:100 / subcode:4279004）になる）。
+// deadline は絶対時刻（ミリ秒）。Netlify 同期 Function の実行時間制限に収めるため有限に打ち切る。
+const waitForContainerReady = async (creation_id, token, deadline) => {
+  // 予算が尽きていても状態確認は必ず 1 回行う（既に FINISHED なら公開できるため）
+  for (;;) {
     const url = `${THREADS_API_BASE}/${encodeURIComponent(creation_id)}`
       + `?fields=status,error_message&access_token=${encodeURIComponent(token)}`;
     const res = await fetch(url);
@@ -66,13 +77,14 @@ const waitForContainerReady = async (creation_id, token) => {
       return false;
     }
 
-    // IN_PROGRESS など: 次回チェックまで待機（最終試行後は待たない）
-    if (attempt < MAX_ATTEMPTS - 1) {
-      await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+    // IN_PROGRESS など: 次回チェックが予算内に収まる場合のみ待機して再確認する
+    if (Date.now() + POLL_INTERVAL_MS >= deadline) {
+      break;
     }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
-  console.error(`threads container not ready after ${MAX_ATTEMPTS} attempts: ${creation_id}`);
+  console.error(`threads container not ready within budget: ${creation_id}`);
   return false;
 };
 
@@ -96,7 +108,8 @@ const publishContainer = async (creation_id, token) => {
 
 // Threads へ 1 件投稿する。成功時 { ok: true }、失敗時 { ok: false, statusCode, error }。
 // isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
-const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) => {
+// deadline は絶対時刻（ミリ秒）で、この投稿に使える実行時間の上限を表す。
+const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost, deadline }) => {
   // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
   const replyParams = (reply_to_id != null && reply_to_id !== '')
     ? { reply_to_id }
@@ -110,7 +123,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
       text,
       is_ghost_post: true,
       access_token: token,
-    });
+    }, 'ghost');
     if (creation_id == null) {
       return { ok: false, statusCode: 500, error: 'failed to create threads ghost container' };
     }
@@ -128,7 +141,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
         text,
         access_token: token,
         ...replyParams,
-      });
+      }, 'text');
       if (creation_id == null) {
         return { ok: false, statusCode: 500, error: 'failed to create threads container' };
       }
@@ -140,26 +153,39 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
         text,
         access_token: token,
         ...replyParams,
-      });
+      }, 'image');
       if (creation_id == null) {
         return { ok: false, statusCode: 500, error: 'failed to create threads container' };
       }
     } else {
       // カルーセル投稿（media_type=CAROUSEL）
-      // 子コンテナを並列作成
+      // 子コンテナを並列作成。カルーセルの子であることを is_carousel_item=true で明示しないと
+      // 親コンテナ作成時に "Invalid Carousel Children" となる
       const childIds = await Promise.all(
         imageUrls.map((image_url) =>
           createContainer({
             media_type: 'IMAGE',
             image_url,
+            is_carousel_item: true,
             access_token: token,
-          })
+          }, 'carousel-item')
         )
       );
 
       // 子コンテナのいずれか 1 つでも失敗した場合は投稿全体を失敗とする
       if (childIds.some((id) => id == null)) {
         return { ok: false, statusCode: 500, error: 'failed to create threads child container' };
+      }
+
+      // 親コンテナを作成する前に、すべての子コンテナの処理完了を待つ（並列に待つため
+      // 所要時間は最も遅い子に依存する）。未完了の子を children に含めると
+      // "Invalid Carousel Children" となる
+      const childDeadline = Math.min(deadline, Date.now() + CHILD_WAIT_BUDGET_MS);
+      const childrenReady = await Promise.all(
+        childIds.map((id) => waitForContainerReady(id, token, childDeadline))
+      );
+      if (childrenReady.some((ready) => ready !== true)) {
+        return { ok: false, statusCode: 500, error: 'threads child container not ready' };
       }
 
       // 親コンテナを作成
@@ -169,7 +195,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
         text,
         access_token: token,
         ...replyParams,
-      });
+      }, 'carousel');
       if (creation_id == null) {
         return { ok: false, statusCode: 500, error: 'failed to create threads carousel container' };
       }
@@ -177,7 +203,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
   }
 
   // 公開前にコンテナの処理完了（status=FINISHED）を待つ
-  const ready = await waitForContainerReady(creation_id, token);
+  const ready = await waitForContainerReady(creation_id, token, deadline);
   if (!ready) {
     return { ok: false, statusCode: 500, error: 'threads container not ready' };
   }
@@ -194,8 +220,14 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost }) =
 // PR ゴースト投稿を条件判定のうえサーバー側で実行する。
 // 本投稿の成否には影響させず（例外・失敗は console のみ）、成功時のみ D1 の実行状態を更新する。
 // 間隔状態のキーは Threads アカウント（user_id）。セッションをまたいでゲートを共有する。
-const tryPostPrGhost = async (threadsUserId, token) => {
+// 本投稿で実行時間予算を使い切っている場合は試行しない（状態も更新しないため次回の本投稿で再試行される）。
+const tryPostPrGhost = async (threadsUserId, token, deadline) => {
   try {
+    if (deadline - Date.now() < GHOST_MIN_BUDGET_MS) {
+      console.info('PR ghost post skipped: insufficient time budget remaining');
+      return;
+    }
+
     const state = await getPrGhostState(threadsUserId);
     if (state == null || state.enabled !== true) {
       return;
@@ -217,7 +249,7 @@ const tryPostPrGhost = async (threadsUserId, token) => {
     const index = state.rotationIndex % texts.length;
     const prText = texts[index];
 
-    const result = await doThreadsPost({ token, text: prText, imageUrls: [], isGhost: true });
+    const result = await doThreadsPost({ token, text: prText, imageUrls: [], isGhost: true, deadline });
     if (result.ok) {
       await updatePrGhostExecState(threadsUserId, Date.now(), state.rotationIndex + 1);
     } else {
@@ -229,6 +261,9 @@ const tryPostPrGhost = async (threadsUserId, token) => {
 };
 
 const handler = async (event) => {
+  // Netlify 同期 Function の実行時間制限に収めるための全体予算（本投稿と PR ゴースト投稿で共有する）
+  const deadline = Date.now() + OVERALL_BUDGET_MS;
+
   // CORS対応
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -258,13 +293,13 @@ const handler = async (event) => {
     const imageUrls = Array.isArray(images) ? images : [];
 
     // 本投稿
-    const result = await doThreadsPost({ token, text, imageUrls, reply_to_id, isGhost: false });
+    const result = await doThreadsPost({ token, text, imageUrls, reply_to_id, isGhost: false, deadline });
     if (!result.ok) {
       return errorResponse(result.statusCode, result.error);
     }
 
     // 本投稿が成功したときのみ PR ゴースト投稿を試行する（失敗は本投稿に影響させない）
-    await tryPostPrGhost(stored.meta.user_id, token);
+    await tryPostPrGhost(stored.meta.user_id, token, deadline);
 
     const response = {
       statusCode: 200,
