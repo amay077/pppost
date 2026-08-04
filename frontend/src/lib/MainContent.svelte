@@ -28,8 +28,6 @@ let text = loadMessage()?.message ?? '';
 let images: ImageData[] = []; // 新しいデータ構造の配列
 
 let expandedReply = false;
-let replyToIdForBluesky = '';
-let replyToIdForMisskey = '';
 let replyToPost: PresentedPost = {
   display_posted_at: undefined,
   trimmed_text: '',
@@ -37,6 +35,39 @@ let replyToPost: PresentedPost = {
     bluesky: undefined,
     threads: undefined,
     misskey: undefined,
+  }
+};
+let expandedQuote = false;
+let quoteToPost: PresentedPost = {
+  display_posted_at: undefined,
+  trimmed_text: '',
+  postOfType: {
+    bluesky: undefined,
+    threads: undefined,
+    misskey: undefined,
+  }
+};
+
+// リプライ元・引用元の未選択状態を表す空の投稿
+const emptyPresentedPost = (): PresentedPost => ({
+  display_posted_at: undefined,
+  trimmed_text: '',
+  postOfType: {
+    bluesky: undefined,
+    threads: undefined,
+    misskey: undefined,
+  }
+});
+
+// リプライ元と引用元の排他制御（どちらか一方のみ選択可能）
+const onChangeReplyTarget = () => {
+  if (replyToPost?.display_posted_at != undefined) {
+    quoteToPost = emptyPresentedPost();
+  }
+};
+const onChangeQuoteTarget = () => {
+  if (quoteToPost?.display_posted_at != undefined) {
+    replyToPost = emptyPresentedPost();
   }
 };
 
@@ -305,8 +336,8 @@ const post = async () => {
   try {
     posting = true;
 
-    const getPostId = (url: string) => {
-      if ((url?.length ?? 0) == 0) {
+    const getPostId = (url: string | undefined) => {
+      if (url == null || url.length == 0) {
         return '';
       }
 
@@ -324,26 +355,24 @@ const post = async () => {
     // 送信する画像URLリストを作成 (croppedUrlがあれば優先、なければoriginalUrl)
     const urlsToPost = images.map(img => img.croppedUrl ?? img.originalUrl);
 
-    const res = await postToSns(text, urlsToPost, { reply_to_ids: {
-      bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url ?? replyToIdForBluesky),
-      // Threads は permalink 末尾がショートコードで API の投稿 ID と異なるため、
-      // getPostId は使わず取得済みの id をそのまま使用する（design.md D1）
-      threads: replyToPost?.postOfType['threads']?.id ?? '',
-      misskey: getPostId(replyToPost?.postOfType['misskey']?.url ?? replyToIdForMisskey),
-    } });
+    const res = await postToSns(text, urlsToPost, {
+      reply_to_ids: {
+        bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url),
+        // Threads は permalink 末尾がショートコードで API の投稿 ID と異なるため、
+        // getPostId は使わず取得済みの id をそのまま使用する（design.md D1）
+        threads: replyToPost?.postOfType['threads']?.id ?? '',
+        misskey: getPostId(replyToPost?.postOfType['misskey']?.url),
+      },
+      quote_to_ids: {
+        bluesky: getPostId(quoteToPost?.postOfType['bluesky']?.url),
+        threads: quoteToPost?.postOfType['threads']?.id ?? '',
+        misskey: getPostId(quoteToPost?.postOfType['misskey']?.url),
+      },
+    });
 
     if (res.errors.length == 0) {
-      replyToIdForBluesky = '';
-      replyToIdForMisskey = '';
-      replyToPost = {
-        display_posted_at: undefined,
-        trimmed_text: '',
-        postOfType: {
-          bluesky: undefined,
-          threads: undefined,
-          misskey: undefined,
-        }
-      };
+      replyToPost = emptyPresentedPost();
+      quoteToPost = emptyPresentedPost();
       posted = true;
       alert('投稿しました。');
     } else {
@@ -467,17 +496,8 @@ const getTypes = (post: PresentedPost) => {
   <button class="btn btn-primary-outline" on:click="{() => {
     text = '';
     images = []; // 画像データをクリア
-    replyToIdForBluesky = '';
-    replyToIdForMisskey = '';
-    replyToPost = {
-      display_posted_at: undefined,
-      trimmed_text: '',
-      postOfType: {
-        bluesky: undefined,
-        threads: undefined,
-        misskey: undefined,
-      }
-    };
+    replyToPost = emptyPresentedPost();
+    quoteToPost = emptyPresentedPost();
     posted = false;
     onTextChange();
   }}" disabled={text.length <= 0 && images.length <= 0}>
@@ -559,31 +579,57 @@ const getTypes = (post: PresentedPost) => {
 
   {#if expandedReply}
 
-  <select class="form-select form-select-sm" bind:value={replyToPost}>
-    <option>Manual reply</option>
+  <select class="form-select form-select-sm" bind:value={replyToPost} on:change={onChangeReplyTarget}>
+    <option>（選択しない）</option>
     {#each myPosts as post}
     <option value={post}>{post.display_posted_at} - {post.trimmed_text} {getTypes(post)}</option>
     {/each}
   </select>
 
-  {#if replyToPost.display_posted_at == undefined}
+  {/if}
 
-  <div class="my-2"> - OR - </div>
+</div>
 
-  {#if postSettings.bluesky != null && postTo.bluesky}            
-  <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
-    <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 -3.268 64 68.414" width="16" height="16"><path fill="currentColor" d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>
-    <input class="form-control" type="text" placeholder="Post URL or ID" bind:value={replyToIdForBluesky}  />
+<div class="mt-4 d-flex flex-column align-items-start gap-1">
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="d-flex flex-row align-items-center gap-1" style="cursor: pointer;"  on:click={async () => {
+    expandedQuote = !expandedQuote;
+    // Quote展開時に毎回投稿を再読み込み（洗い替え）
+    if (expandedQuote && !loadingMyPosts) {
+      await onLoadMyPosts();
+    }
+  }}>
+  
+    <span class="h5">Quote:</span>
+    <div class="d-flex flex-row gap-1 align-items-center">
+    {#if !expandedQuote}
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-chevron-right" viewBox="0 0 16 16">
+      <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+    </svg>
+    {:else}
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-chevron-down" viewBox="0 0 16 16">
+      <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+    </svg>
+    {/if}
+    {#if loadingMyPosts}
+    <div class="spinner-border spinner-border-sm" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    {/if}
+
+    </div>
   </div>
-  {/if}
 
-  {#if postSettings.misskey != null && postTo.misskey}
-  <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
-    <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8.91076 16.8915c-1.03957.0038-1.93213-.6294-2.35267-1.366-.22516-.3217-.66989-.4364-.6761 0v2.0148c0 .8094-.29152 1.5097-.87581 2.1002-.56755.573-1.25977.8595-2.0779.8595-.80014 0-1.49298-.2865-2.07727-.8601C.28408 19.05 0 18.3497 0 17.5403V6.45968c0-.62378.17553-1.18863.52599-1.69455.36657-.52284.83426-.88582 1.4018-1.08769a2.84574 2.84574 0 0 1 1.00049-.17742c.90125 0 1.65239.35421 2.25281 1.06262l2.99713 3.51572c.06699.05016.263.43696.73192.43696.47016 0 .6916-.3868.75796-.43758l2.9717-3.5151c.6178-.70841 1.377-1.06262 2.2782-1.06262.3337 0 .6675.05893 1.0012.17742.5669.20187 1.0259.56422 1.377 1.08769.3665.50592.5501 1.07077.5501 1.69455V17.5403c0 .8094-.2915 1.5097-.8758 2.1002-.5675.573-1.2604.8595-2.0779.8595-.8008 0-1.493-.2865-2.0779-.8601-.5669-.5899-.8504-1.2902-.8504-2.0996v-2.0148c-.0496-.5499-.5303-.2032-.7009 0-.4503.8431-1.31369 1.3616-2.35264 1.366ZM21.447 8.60998c-.7009 0-1.3015-.24449-1.8019-.73348-.4838-.50571-.7257-1.11277-.7257-1.82118s.2419-1.30711.7257-1.79611c.5004-.50571 1.101-.75856 1.8019-.75856.7009 0 1.3017.25285 1.8025.75856.5003.489.7505 1.0877.7505 1.79611 0 .70841-.2502 1.31547-.7505 1.82118-.5008.48899-1.1016.73348-1.8025.73348Zm.0248.50655c.7009 0 1.2935.25285 1.7777.75856.5003.50571.7505 1.11301.7505 1.82181v6.2484c0 .7084-.2502 1.3155-.7505 1.8212-.4838.489-1.0764.7335-1.7777.7335-.7005 0-1.3011-.2445-1.8019-.7335-.5003-.5057-.7505-1.1128-.7505-1.8212v-6.2484c0-.7084.2502-1.3157.7505-1.82181.5004-.50571 1.101-.75856 1.8019-.75856Z"/></svg>
-    <input class="form-control" type="text" placeholder="Note URL or ID" bind:value={replyToIdForMisskey}  />
-  </div>
-  {/if}
-  {/if}
+  {#if expandedQuote}
+
+  <select class="form-select form-select-sm" bind:value={quoteToPost} on:change={onChangeQuoteTarget}>
+    <option>（選択しない）</option>
+    {#each myPosts as post}
+    <option value={post}>{post.display_posted_at} - {post.trimmed_text} {getTypes(post)}</option>
+    {/each}
+  </select>
+
   {/if}
 
 </div>

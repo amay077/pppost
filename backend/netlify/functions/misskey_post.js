@@ -47,7 +47,7 @@ const handler = async (event) => {
     const origin = buildMisskeyOrigin(host);
     const token = stored.token.access_token;
 
-    const { text, images, reply_to_id } = JSON.parse(event.body);
+    const { text, images, reply_to_id, quote_to_id } = JSON.parse(event.body);
 
     const hasImages = Array.isArray(images) && images.length > 0;
 
@@ -132,6 +132,9 @@ const handler = async (event) => {
     }
     if ((reply_to_id?.length ?? 0) > 0) {
       body.replyId = reply_to_id;
+    }
+    if ((quote_to_id?.length ?? 0) > 0) {
+      body.renoteId = quote_to_id;
     }
 
     const res = await fetch(`${origin}/api/notes/create`, {

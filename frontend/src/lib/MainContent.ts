@@ -212,11 +212,18 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
   return result;
 }
 
-export const postToSns = async (text: string, imageDataURLs: string[], options: { reply_to_ids: {
-  bluesky: string,
-  threads: string,
-  misskey: string,
-}}): Promise<{ errors: string[] }> => {
+export const postToSns = async (text: string, imageDataURLs: string[], options: {
+  reply_to_ids: {
+    bluesky: string,
+    threads: string,
+    misskey: string,
+  },
+  quote_to_ids: {
+    bluesky: string,
+    threads: string,
+    misskey: string,
+  },
+}): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
   // 画像を一度だけストレージ (R2) にアップロード
@@ -245,13 +252,13 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   for (const type of enableTypes) {
     switch (type) {
     case 'bluesky':
-      promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
+      promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky, options?.quote_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'threads':
-      promises.push(postToThreads(text, uploadedImageUrls, options?.reply_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
+      promises.push(postToThreads(text, uploadedImageUrls, options?.reply_to_ids?.threads, options?.quote_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
       break;
     case 'misskey':
-      promises.push(postToMisskey(text, uploadedImageUrls, options?.reply_to_ids?.misskey).then((r) => { if (!r) errors.push('Misskey') }));
+      promises.push(postToMisskey(text, uploadedImageUrls, options?.reply_to_ids?.misskey, options?.quote_to_ids?.misskey).then((r) => { if (!r) errors.push('Misskey') }));
       break;
     }
 
@@ -276,7 +283,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 };
 
 
-const postToMisskey = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
+const postToMisskey = async (text: string, imageUrls: string[], reply_to_id: string, quote_to_id: string): Promise<boolean> => {
   try {
     // host / token はサーバーがセッションから復号して使用するため、クライアントは送らない
     const res = await fetch(`${Config.API_ENDPOINT}/misskey_post`, {
@@ -285,7 +292,8 @@ const postToMisskey = async (text: string, imageUrls: string[], reply_to_id: str
       body: JSON.stringify({
         text,
         images: imageUrls,
-        reply_to_id
+        reply_to_id,
+        quote_to_id
       }),
     });
 
@@ -317,7 +325,7 @@ const loadMyPostsMisskey = async (): Promise<Post[]> => {
 };
 
 
-const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string, quote_to_id?: string): Promise<boolean> => {
   try {
     // トークンはサーバーがセッションから復号して使用する
     const res = await fetch(`${Config.API_ENDPOINT}/threads_post`, {
@@ -327,6 +335,7 @@ const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: st
         text,
         images: imageUrls,
         reply_to_id,
+        quote_to_id,
       }),
     });
 
@@ -378,7 +387,7 @@ const loadMyPostsBluesky = async (): Promise<Post[]> => {
   }
 };
 
-const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
+const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: string, quote_to_id: string): Promise<boolean> => {
   try {
     // session データはサーバーがセッションから復号して使用する
     const res = await fetch(`${Config.API_ENDPOINT}/bluesky_post`, {
@@ -387,7 +396,8 @@ const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: str
       body: JSON.stringify({
         text,
         images: imageUrls,
-        reply_to_id
+        reply_to_id,
+        quote_to_id
       }),
     });
 

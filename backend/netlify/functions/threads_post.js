@@ -109,10 +109,14 @@ const publishContainer = async (creation_id, token) => {
 // Threads へ 1 件投稿する。成功時 { ok: true }、失敗時 { ok: false, statusCode, error }。
 // isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
 // deadline は絶対時刻（ミリ秒）で、この投稿に使える実行時間の上限を表す。
-const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost, deadline }) => {
+const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline }) => {
   // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
   const replyParams = (reply_to_id != null && reply_to_id !== '')
     ? { reply_to_id }
+    : {};
+  // 引用投稿時のみトップレベルコンテナに付与する追加パラメータ
+  const quoteParams = (quote_to_id != null && quote_to_id !== '')
+    ? { quote_post_id: quote_to_id }
     : {};
 
   let creation_id;
@@ -141,6 +145,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost, dea
         text,
         access_token: token,
         ...replyParams,
+        ...quoteParams,
       }, 'text');
       if (creation_id == null) {
         return { ok: false, statusCode: 500, error: 'failed to create threads container' };
@@ -153,6 +158,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost, dea
         text,
         access_token: token,
         ...replyParams,
+        ...quoteParams,
       }, 'image');
       if (creation_id == null) {
         return { ok: false, statusCode: 500, error: 'failed to create threads container' };
@@ -195,6 +201,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, isGhost, dea
         text,
         access_token: token,
         ...replyParams,
+        ...quoteParams,
       }, 'carousel');
       if (creation_id == null) {
         return { ok: false, statusCode: 500, error: 'failed to create threads carousel container' };
@@ -289,11 +296,11 @@ const handler = async (event) => {
     }
     const token = stored.token.access_token;
 
-    const { text, images, reply_to_id } = JSON.parse(event.body);
+    const { text, images, reply_to_id, quote_to_id } = JSON.parse(event.body);
     const imageUrls = Array.isArray(images) ? images : [];
 
     // 本投稿
-    const result = await doThreadsPost({ token, text, imageUrls, reply_to_id, isGhost: false, deadline });
+    const result = await doThreadsPost({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost: false, deadline });
     if (!result.ok) {
       return errorResponse(result.statusCode, result.error);
     }

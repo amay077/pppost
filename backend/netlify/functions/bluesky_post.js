@@ -80,7 +80,7 @@ const handler = async (event) => {
     }
     const sessionData = stored.token;
 
-    const { text, images, reply_to_id } = JSON.parse(event.body);
+    const { text, images, reply_to_id, quote_to_id } = JSON.parse(event.body);
     console.log('Bluesky post request:', { text, images: images?.length, reply_to_id });
 
     // Bluesky Agentの初期化
@@ -362,13 +362,61 @@ const handler = async (event) => {
       return { root, parent };
     })();
 
+    // 引用処理
+    // 引用元の uri / cid を解決し、app.bsky.embed.record を組み立てる。
+    // 解決できない場合は null を返し、後段で失敗として扱う。
+    const quoteEmbed = await (async () => {
+      if (!quote_to_id || quote_to_id.length === 0) {
+        return undefined;
+      }
+
+      const uri = `at://${did}/app.bsky.feed.post/${quote_to_id}`;
+      const r = await agent.getPostThread({ uri });
+      const th = r?.data?.thread;
+      const cid = th?.post?.cid;
+      if (cid == null) {
+        return null;
+      }
+
+      return {
+        $type: 'app.bsky.embed.record',
+        record: { uri, cid },
+      };
+    })();
+
+    // 引用元が解決できない場合は失敗として返す（通常投稿にフォールバックしない）
+    if (quoteEmbed === null) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'quote target not found' })
+      };
+    }
+
+    // embed を組み立てる
+    // 引用あり: 画像・OGP が無ければ app.bsky.embed.record、あれば recordWithMedia で共存させる
+    let embed = embedImages || embedOgp;
+    if (quoteEmbed != null) {
+      if (embed != null) {
+        embed = {
+          $type: 'app.bsky.embed.recordWithMedia',
+          record: quoteEmbed,
+          media: embed,
+        };
+      } else {
+        embed = quoteEmbed;
+      }
+    }
+
     // 投稿
     const postRecord = {
       $type: 'app.bsky.feed.post',
       text: rt.text,
       facets: rt.facets,
       createdAt: new Date().toISOString(),
-      embed: embedImages || embedOgp, // 画像がある場合は画像、なければOGP
+      embed,
       reply
     };
     
