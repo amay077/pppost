@@ -67,6 +67,22 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
   }
 }
 
+export async function getSpaVersion(): Promise<{ built_at: string } | null> {
+
+  try {
+    const res = await fetch(`version.json?v=${Date.now()}`);
+
+    if (res.ok) {
+      return await res.json();
+    } else {
+      return null;
+    }
+  } catch (error) {
+    console.error(`getSpaVersion -> error:`, error);
+    return null;
+  }
+}
+
 export const loadMyPosts = async (): Promise<PresentedPost[]> => {
 
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));

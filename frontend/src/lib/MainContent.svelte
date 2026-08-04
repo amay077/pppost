@@ -10,12 +10,13 @@ import ThreadsConnection from "./ThreadsConnection.svelte";
 import MisskeyConnection from "./MisskeyConnection.svelte";
 import { loadMessage, loadPostSetting, loadSessionId, saveMessage, savePostSetting, saveSessionId, type SettingType } from "./func";
 import { Config } from "../config";
-import { getApiVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
+import { getApiVersion, getSpaVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
 import dayjs from "dayjs";
 
 const built_at = (window as any)['built_at'] ?? '';
 let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
+let spaUpdateAvailable = false;
 let myPosts: PresentedPost[] =[];
 
 let loading = true;
@@ -375,6 +376,12 @@ const onChangePostSettings = () => {
 
 const onVersion = async () => { 
   apiVer = await getApiVersion();
+  const spaVer = await getSpaVersion();
+  spaUpdateAvailable = built_at.length > 0 && spaVer != null && spaVer.built_at > built_at;
+}
+
+const onUpdateSpa = () => {
+  location.href = location.pathname + '?v=' + Date.now();
 }
 
 const onLoadMyPosts = async () => {
@@ -626,6 +633,9 @@ const getTypes = (post: PresentedPost) => {
   >version</button>
   {#if apiVer.env_ver?.length > 0}
   <span>spa_build: {built_at}</span>
+  {#if spaUpdateAvailable}
+  <button class="btn btn-sm btn-link" on:click={onUpdateSpa}>更新</button>
+  {/if}
   <span>api_build: {apiVer.build_at}</span>
   <span>api_ver: {apiVer.env_ver}</span>
   {/if}
