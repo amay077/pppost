@@ -368,6 +368,25 @@ const onTextChange = () => {
   saveMessage({ message: text });
 }
 
+const clearPostContent = () => {
+  text = '';
+  images = [];
+  replyToPost = emptyPresentedPost();
+  quoteToPost = emptyPresentedPost();
+  posted = false;
+  onTextChange();
+
+  // 共有起動時のクエリから本文がリロード時に復活しないようにする
+  const currentUrl = new URL(window.location.href);
+  currentUrl.searchParams.delete('text');
+  currentUrl.searchParams.delete('url');
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
+  );
+}
+
 // Web Share API による共有
 const webShareSupported = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 const shareContent = async () => {
@@ -599,14 +618,7 @@ const getTypes = (post: PresentedPost) => {
 
   </button>
 
-  <button class="btn btn-primary-outline" on:click="{() => {
-    text = '';
-    images = []; // 画像データをクリア
-    replyToPost = emptyPresentedPost();
-    quoteToPost = emptyPresentedPost();
-    posted = false;
-    onTextChange();
-  }}" disabled={text.length <= 0 && images.length <= 0}>
+  <button class="btn btn-primary-outline" on:click={clearPostContent} disabled={text.length <= 0 && images.length <= 0}>
     Clear
     </button>
 
