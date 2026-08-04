@@ -62,6 +62,12 @@
 - **WHEN** 投稿テキストに HTML タグまたは HTML エンティティが含まれている
 - **THEN** グループ化のための正規化時にそれらは除去または変換される
 
+#### Scenario: ハッシュタグの # 記号は除去される
+
+- **WHEN** 投稿テキストにハッシュタグ（`#` に続くキーワード）が含まれている
+- **THEN** グループ化のための正規化時にハッシュタグの `#` 記号のみが除去され、キーワードは残る
+- **AND** Threads のように投稿文から `#` が削除されたテキスト（例: `話題 今日の投稿`）と、他 SNS の `#` 付きテキスト（例: `#話題 今日の投稿`）が同一のテキストとして扱われる
+
 #### Scenario: 十分な長さのテキスト比較
 
 - **WHEN** 投稿のグループ化キーを生成する
@@ -89,3 +95,4 @@
 - [2026-06-28-PPP-012-add-threads-reply](../../changes/archive/2026-06-28-PPP-012-add-threads-reply/proposal.md)
 - [2026-08-01-PPP-025-add-misskey-posting](../../changes/archive/2026-08-01-PPP-025-add-misskey-posting/proposal.md)
 - [2026-08-02-PPP-026-group-reply-candidates-by-time](../../changes/archive/2026-08-02-PPP-026-group-reply-candidates-by-time/proposal.md)
+- [2026-08-04-PPP-030_add-hashtag-normalization](../../changes/archive/2026-08-04-PPP-030_add-hashtag-normalization/proposal.md)
