@@ -402,8 +402,27 @@ const onVersion = async () => {
   spaUpdateAvailable = built_at.length > 0 && spaVer != null && spaVer.built_at > built_at;
 }
 
-const onUpdateSpa = () => {
-  location.href = location.pathname + '?v=' + Date.now();
+const onUpdateSpa = async () => {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration != null) {
+        // 新 sw.js（新 precache マニフェスト）をフェッチ・インストール
+        await registration.update();
+        const waiting = registration.waiting;
+        if (waiting != null) {
+          // 新 SW を即時アクティブ化（sw.js は SKIP_WAITING メッセージ対応済み）
+          waiting.postMessage({ type: 'SKIP_WAITING' });
+          await new Promise<void>((resolve) => {
+            navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('onUpdateSpa -> error:', error);
+  }
+  location.reload();
 }
 
 const onLoadMyPosts = async () => {
