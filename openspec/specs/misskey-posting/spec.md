@@ -205,9 +205,9 @@ Misskey の自投稿取得に失敗した場合でも、システムは他の SN
 
 システムは、リプライ元として Misskey の自投稿が選択されているとき、`notes/create` に `replyId` を指定してリプライとして投稿しなければならない (SHALL)。画像付きの場合も同様に `replyId` を付与しなければならない (SHALL)。
 
-Misskey のノート URL は `https://{host}/notes/{noteId}` であり、末尾のパスセグメントがそのまま API のノート ID であるため、システムは URL の末尾のパスセグメントをノート ID として導出しなければならない (SHALL)。システムは、リプライ元選択ドロップダウンで選択された自投稿からの導出と、ユーザーがノート URL またはノート ID を直接入力する手動指定の双方を受け付けなければならない (SHALL)。ノート ID が URL の形をとらない文字列（`abcdefg` など）で入力された場合、システムはそれをそのままノート ID として扱わなければならず (SHALL)、例外により投稿処理を中断してはならない (SHALL NOT)。
+Misskey のノート URL は `https://{host}/notes/{noteId}` であり、末尾のパスセグメントがそのまま API のノート ID であるため、システムはリプライ元選択ドロップダウンで選択された自投稿の URL の末尾のパスセグメントをノート ID として導出しなければならない (SHALL)。リプライ元の手動入力は受け付けない（`### Requirement: リプライ元・引用元の選択` に従う）。
 
-リプライ元の解決順序は、選択されたリプライ元グループに含まれる Misskey の投稿を優先し、それがない場合は手動入力欄の値を用いるものとする (SHALL)。選択されたリプライ元グループに Misskey の投稿が含まれず、かつ手動入力欄も空である場合、およびリプライ元を選択も入力もしていない場合、システムは `replyId` を付与せず通常投稿として処理しなければならない (SHALL)。
+リプライ元が選択されていない場合、または選択されたリプライ元グループに Misskey の投稿が含まれない場合、システムは `replyId` を付与せず通常投稿として処理しなければならない (SHALL)。
 
 リプライ投稿に失敗した場合、システムはエラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
 
@@ -217,34 +217,9 @@ Misskey のノート URL は `https://{host}/notes/{noteId}` であり、末尾�
 - **WHEN** 投稿ボタンを押下する
 - **THEN** `notes/create` に `replyId` が付与され、選択した自投稿へのリプライとして公開される
 
-#### Scenario: ノート URL を手動入力してリプライする（Reply via manually entered URL）
-
-- **GIVEN** ユーザーが Misskey を投稿対象に選択し、リプライ元手動入力欄に `https://misskey.io/notes/xxxx` を入力している
-- **WHEN** 投稿ボタンを押下する
-- **THEN** URL 末尾のノート ID が `replyId` として付与され、その投稿へのリプライとして公開される
-
-#### Scenario: ノート ID を手動入力してリプライする（Reply via manually entered note ID）
-
-- **GIVEN** ユーザーが Misskey を投稿対象に選択し、リプライ元手動入力欄に URL ではないノート ID（`abcdefg`）を入力している
-- **WHEN** 投稿ボタンを押下する
-- **THEN** 入力値がそのまま `replyId` として付与され、その投稿へのリプライとして公開される
-- **AND** URL としてパースできないことによる例外で、Misskey および他 SNS への投稿処理が中断しない
-
-#### Scenario: グループに Misskey の投稿が無く手動入力がある（Group without Misskey note falls back to manual input）
-
-- **GIVEN** ユーザーがリプライ元手動入力欄に Misskey のノート URL を入力したうえで、Misskey の投稿を含まないリプライ元グループを選択している
-- **WHEN** 投稿ボタンを押下する
-- **THEN** 手動入力欄の値から導出したノート ID が `replyId` として付与される
-
-#### Scenario: グループに Misskey の投稿が無く手動入力も無い（Group without Misskey note and no manual input）
-
-- **GIVEN** ユーザーが Misskey の投稿を含まないリプライ元グループを選択し、リプライ元手動入力欄は空である
-- **WHEN** 投稿ボタンを押下する
-- **THEN** `replyId` なしの通常投稿として公開される
-
 #### Scenario: リプライ元未指定時は通常投稿（Normal post without reply）
 
-- **GIVEN** ユーザーが Misskey を投稿対象に選択し、リプライ元を選択も入力もしていない
+- **GIVEN** ユーザーが Misskey を投稿対象に選択し、リプライ元を選択していない
 - **WHEN** 投稿ボタンを押下する
 - **THEN** `replyId` なしの通常投稿として公開される
 
@@ -267,6 +242,42 @@ Misskey のノート URL は `https://{host}/notes/{noteId}` であり、末尾�
 - **THEN** Misskey への投稿が失敗する
 - **AND** エラー一覧に `Misskey` が含まれ、ユーザーへ通知される
 
+### Requirement: Misskey への引用投稿（Post quote to Misskey）
+
+システムは、引用元として Misskey の自投稿が選択されているとき、`notes/create` に `renoteId` を指定して引用リノートとして投稿しなければならない (SHALL)。画像付きの場合も同様に、アップロード済み画像の `fileIds` とともに `renoteId` を付与しなければならない (SHALL)。
+
+Misskey のノート URL は `https://{host}/notes/{noteId}` であり、末尾のパスセグメントがそのまま API のノート ID であるため、システムは引用元選択ドロップダウンで選択された自投稿の URL の末尾のパスセグメントをノート ID として導出しなければならない (SHALL)。
+
+引用元が選択されていない場合、または選択された引用元グループに Misskey の投稿が含まれない場合、システムは `renoteId` を付与せず通常投稿として処理しなければならない (SHALL)。
+
+引用投稿に失敗した場合、システムはエラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
+
+#### Scenario: 自投稿を選択して引用する（Quote own note）
+
+- **GIVEN** ユーザーが Misskey に接続済みで、引用元として Misskey の自投稿を選択し、本文を入力している
+- **WHEN** 投稿ボタンを押下する
+- **THEN** `notes/create` に `renoteId` が付与され、選択した自投稿の引用リノートとして公開される
+
+#### Scenario: 画像付きで引用する（Quote with images）
+
+- **GIVEN** ユーザーが引用元として Misskey の自投稿を選択し、本文と画像を入力している
+- **WHEN** 投稿ボタンを押下する
+- **THEN** `fileIds` と `renoteId` が付与された引用リノートとして公開される
+
+#### Scenario: 引用元未選択時は通常投稿（Normal post without quote）
+
+- **GIVEN** ユーザーが Misskey を投稿対象に選択し、引用元を選択していない
+- **WHEN** 投稿ボタンを押下する
+- **THEN** `renoteId` なしの通常投稿として公開される
+
+#### Scenario: 引用失敗時の通知（Quote failure notification）
+
+- **GIVEN** ユーザーが引用元として Misskey の自投稿を指定している
+- **AND** 引用投稿が失敗する状態である（元ノートの削除など）
+- **WHEN** 投稿ボタンを押下する
+- **THEN** エラー一覧に `Misskey` が含まれ、ユーザーへ投稿失敗が通知される
+
 ## Related Changes
 
 - [2026-08-01-PPP-025-add-misskey-posting](../../changes/archive/2026-08-01-PPP-025-add-misskey-posting/proposal.md)
+- [2026-08-04-PPP-032_add-quote-posting](../../changes/archive/2026-08-04-PPP-032_add-quote-posting/proposal.md)

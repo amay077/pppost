@@ -28,7 +28,7 @@ TBD - created by archiving change PPP-014-server-side-token-custody. Update Purp
 
 ### Requirement: SNS トークンのサーバー暗号化保管（Server-side encrypted token storage）
 
-システムは、OAuth/ログインで得た各 SNS のトークン（Threads の長命トークン、Mastodon の access_token、Bluesky の session データ、Misskey の MiAuth アクセストークン）を、サーバー側の Cloudflare D1 に AES で暗号化して保存しなければならない (SHALL)。暗号化はレコードごとにランダムな IV を用いなければならない (SHALL)。保管に用いる鍵・Cloudflare の認証情報はサーバー側（環境変数）にのみ置き、クライアントへ渡してはならない (SHALL NOT)。システムは取得・交換したトークンをクライアントへ返してはならない (SHALL NOT)。接続完了時にクライアントへ返してよいのは、セッション ID と表示用メタ情報（アカウント識別子・ハンドル・接続先ホスト等）に限る。
+システムは、OAuth/ログインで得た各 SNS のトークン（Threads の長命トークン、Bluesky の session データ、Misskey の MiAuth アクセストークン）を、サーバー側の Cloudflare D1 に AES で暗号化して保存しなければならない (SHALL)。暗号化はレコードごとにランダムな IV を用いなければならない (SHALL)。保管に用いる鍵・Cloudflare の認証情報はサーバー側（環境変数）にのみ置き、クライアントへ渡してはならない (SHALL NOT)。システムは取得・交換したトークンをクライアントへ返してはならない (SHALL NOT)。接続完了時にクライアントへ返してよいのは、セッション ID と表示用メタ情報（アカウント識別子・ハンドル・接続先ホスト等）に限る。
 
 #### Scenario: 接続時にトークンがサーバーへ保存される（Token stored server-side on connect）
 
@@ -49,7 +49,7 @@ TBD - created by archiving change PPP-014-server-side-token-custody. Update Purp
 
 #### Scenario: 保管トークンで投稿する（Post using stored token）
 
-- **GIVEN** セッションに Threads/Mastodon/Bluesky/Misskey のトークンが保管されている
+- **GIVEN** セッションに Threads/Bluesky/Misskey のトークンが保管されている
 - **WHEN** クライアントが Bearer セッションのみを付けて投稿を要求する
 - **THEN** バックエンドは保管トークンを復号して各 SNS へ投稿する
 
@@ -61,7 +61,7 @@ TBD - created by archiving change PPP-014-server-side-token-custody. Update Purp
 
 ### Requirement: 保管トークンの削除（切断）（Delete stored token on disconnect）
 
-システムは、ユーザーがある SNS の切断を要求したとき、`Authorization: Bearer <session_id>` で認可し、該当セッション ID × 当該 SNS の保管トークンを保管庫（Cloudflare D1）から削除しなければならない (SHALL)。削除の対象は要求された SNS のトークンに限り、システムは同一セッションに保管された他の SNS のトークンを削除してはならない (SHALL NOT)。削除後、システムは当該 SNS を未接続として扱わなければならない (SHALL)。この削除処理は Threads・Mastodon・Bluesky・Misskey のすべての切断で共通に適用される。
+システムは、ユーザーがある SNS の切断を要求したとき、`Authorization: Bearer <session_id>` で認可し、該当セッション ID × 当該 SNS の保管トークンを保管庫（Cloudflare D1）から削除しなければならない (SHALL)。削除の対象は要求された SNS のトークンに限り、システムは同一セッションに保管された他の SNS のトークンを削除してはならない (SHALL NOT)。削除後、システムは当該 SNS を未接続として扱わなければならない (SHALL)。この削除処理は Threads・Bluesky・Misskey のすべての切断で共通に適用される。
 
 #### Scenario: 切断で保管トークンが削除される（Stored token deleted on disconnect）
 
