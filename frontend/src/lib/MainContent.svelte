@@ -178,6 +178,79 @@ const fetchTitleForUrl = async (targetUrl: string): Promise<string | null> => {
   return null;
 };
 
+// YouTube URL のパターン（kind は正規化時に使う URL 形式）
+const YOUTUBE_URL_PATTERNS: Array<{ kind: 'short' | 'watch' | 'shorts'; pattern: RegExp }> = [
+  // 短縮形式 (youtu.be/<video-id>)
+  { kind: 'short', pattern: /https?:\/\/(?:www\.|m\.)?youtu\.be\/([a-zA-Z0-9_-]+)(?:[?&]([^\s、。，．！？〜～#]*))?/ },
+  // フル形式 (youtube.com/watch?v=<video-id>)
+  { kind: 'watch', pattern: /https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)(?:[?&]([^\s、。，．！？〜～#]*))?/ },
+  // ショート動画形式 (youtube.com/shorts/<video-id>)
+  { kind: 'shorts', pattern: /https?:\/\/(?:www\.|m\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]+)(?:[?&]([^\s、。，．！？〜～#]*))?/ },
+];
+
+// クエリパラメータから t=（再生開始時刻）のみを保持し、si= 等のトラッキングパラメータは除去する
+const keepOnlyTimeParam = (query: string | undefined): string => {
+  if (!query) {
+    return '';
+  }
+  const t = new URLSearchParams(query).get('t');
+  return t != null ? `?t=${encodeURIComponent(t)}` : '';
+};
+
+// テキストから YouTube URL を検出・正規化する
+// 短縮形式は watch 形式に展開し、ホストは www.youtube.com に統一する（shorts は形式を維持する）。
+// 日本語の文末記号（。、！？〜等）は URL の一部とみなさない（Swarm の検出と同様）。
+// 複数の YouTube URL が含まれる場合は最初に検出されたもののみを対象にする。
+const resolveYouTubeUrl = (source: string): string | null => {
+  const found = YOUTUBE_URL_PATTERNS
+    .map(({ kind, pattern }) => ({ kind, match: source.match(pattern) }))
+    .filter((entry): entry is { kind: 'short' | 'watch' | 'shorts'; match: RegExpMatchArray } => entry.match != null);
+
+  if (found.length === 0) {
+    return null;
+  }
+
+  found.sort((a, b) => (a.match.index ?? 0) - (b.match.index ?? 0));
+  const { kind, match } = found[0];
+  const videoId = match[1];
+  const query = keepOnlyTimeParam(match[2]);
+
+  if (kind === 'shorts') {
+    return `https://www.youtube.com/shorts/${videoId}${query}`;
+  }
+  return `https://www.youtube.com/watch?v=${videoId}${query}`;
+};
+
+// YouTube の動画タイトルを oEmbed API（youtube_oembed）経由で取得する
+const fetchYouTubeTitle = async (targetUrl: string): Promise<string | null> => {
+  const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
+
+  try {
+    loading = true;
+    const response = await fetch(`${apiUrl}/youtube_oembed?url=${encodeURIComponent(targetUrl)}`);
+
+    if (!response.ok) {
+      console.warn('Failed to fetch YouTube title:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    if (result.success && typeof result.title === 'string' && result.title.trim().length > 0) {
+      return result.title.trim();
+    }
+
+    if (result.error) {
+      console.warn('YouTube title API responded with error:', result.error);
+    }
+  } catch (error) {
+    console.error('Error fetching YouTube title:', error);
+  } finally {
+    loading = false;
+  }
+
+  return null;
+};
+
 onMount(async () => {
   console.log(`onMount`);
 
@@ -261,7 +334,21 @@ onMount(async () => {
       swarmHandled = await scrapeSwarmCheckin(swarmScrapeUrl);
     }
 
-    if (!swarmHandled && queryValueUsed) {
+    // YouTube URL の検出と特別整形（Swarm 処理の次、一般的なタイトル取得より優先）
+    // タイトル取得に失敗した場合も本文は変換せず、一般的なタイトル取得（{タイトル} - {URL}）へフォールスルーしない
+    const youtubeUrl = resolveYouTubeUrl(text);
+    if (youtubeUrl) {
+      console.log('YouTube URL detected:', youtubeUrl);
+      const youtubeTitle = await fetchYouTubeTitle(youtubeUrl);
+      if (youtubeTitle) {
+        text = `${youtubeTitle} ${youtubeUrl}`;
+        console.log('YouTube title fetched:', text);
+      } else {
+        console.warn('Failed to fetch YouTube title for:', youtubeUrl);
+      }
+    }
+
+    if (!swarmHandled && !youtubeUrl && queryValueUsed) {
       const plainUrl = extractUrlOnly(queryValueUsed);
       if (plainUrl) {
         const title = await fetchTitleForUrl(plainUrl);

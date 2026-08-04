@@ -116,3 +116,27 @@ GET http://localhost:9000/.netlify/functions/misskey_token?host=https://misskey.
 
 # セッション識別子が UUID 形式でない（400 が返ること）
 GET http://localhost:9000/.netlify/functions/misskey_token?host=misskey.io&session=../../api/i
+
+####
+
+# ---------------------------------------------------------------
+# youtube_oembed（YouTube ホストの URL のみ許可する）
+# ---------------------------------------------------------------
+
+# 成功（フル URL）
+GET http://localhost:9000/.netlify/functions/youtube_oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ
+
+####
+
+# 成功（短縮 URL）
+GET http://localhost:9000/.netlify/functions/youtube_oembed?url=https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ
+
+####
+
+# 不正（YouTube 以外のホストは 400 が返ること）
+GET http://localhost:9000/.netlify/functions/youtube_oembed?url=https%3A%2F%2Fexample.com%2F
+
+####
+
+# 不正（url 未指定は 400 が返ること）
+GET http://localhost:9000/.netlify/functions/youtube_oembed
