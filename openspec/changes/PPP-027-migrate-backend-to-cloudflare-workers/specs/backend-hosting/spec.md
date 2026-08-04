@@ -68,3 +68,19 @@
 - **GIVEN** Workers の設定に D1 バインディングと、対象バケットにスコープされた R2 用 S3 互換クレデンシャルのみが構成されている
 - **WHEN** トークンの保管・復号・削除および画像の事前署名 URL 発行を実行する
 - **THEN** すべての操作がアカウント全体に効く API トークンなしで完了する
+
+### Requirement: TypeScript による実装（Implemented in TypeScript）
+
+システムは、バックエンド（`backend/worker/`）の実装を TypeScript で行い、`.ts` ファイルで構成しなければならない (SHALL)。ビルド設定（`tsconfig.json`）と依存（`typescript`）を用意し、静的型チェック（`tsc --noEmit`）がエラーなしで通る状態を保たなければならない (SHALL)。ルート・lib・共通処理のすべてを型付きで実装しなければならない (SHALL)。
+
+#### Scenario: 静的型チェックが通る（Type check passes）
+
+- **GIVEN** バックエンドが TypeScript で実装されている
+- **WHEN** `tsc --noEmit` を実行する
+- **THEN** 型エラーなしで完了する
+
+#### Scenario: デプロイが TypeScript からビルドされる（Deploy builds from TypeScript）
+
+- **GIVEN** `backend/worker/` 配下が `.ts` ファイルで構成されている
+- **WHEN** `wrangler deploy` を実行する
+- **THEN** TypeScript がビルドされ、API が動作する

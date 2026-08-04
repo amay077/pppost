@@ -10,6 +10,7 @@
 ## What Changes
 
 - `backend/worker/` を新設し、**単一 Worker + Hono ルーター**で既存 22 関数とパス互換の API を実装する（フロントの変更は `VITE_API_ENDPOINT` の差し替えのみ）
+- バックエンドを **TypeScript** で実装する（[#13](https://github.com/amay077/pppost/issues/13) の backend TS 化要求を本移管に統合）。`backend/worker/` 配下は `.ts` で記述し、`tsconfig.json` と静的型チェック（`tsc --noEmit`）を導入する。wrangler が TypeScript をネイティブにビルドするため、Netlify 時代のような JS のまま維持する理由がなくなる
 - 現在 22 関数へ複製されている CORS プリアンブルとセッション検証を、Hono のミドルウェアへ集約する（`netlify.toml` の `[[headers]]` によるプラットフォーム側の CORS 設定が無くなるため、Worker 側で完結させる）
 - D1 アクセスを HTTP API からバインディングへ変更する（`lib/d1.js` を書き換え、D1 バインディングを引数で受け取る形に統一する。`token-store.js` / `pr-ghost.js` はロジック変更なしの**機械的な書き換え**（引数の追加）のみで移植する）
 - `wrangler.toml` に `nodejs_compat` と `compatibility_date`（2025-04-01 以降）を指定し、vars / secrets を `process.env` から参照できる状態にする（`crypto.js` 等の `process.env` 直読みをロジック変更なしで移植するため）
@@ -35,6 +36,10 @@ Mastodon 削除（[#29](https://github.com/amay077/pppost/issues/29)）を先に
 
 いずれかが先にアーカイブされなかった場合は、本 change のアーカイブ前にデルタのベース本文を取り直す。
 
+### 後続 change との関係
+
+- PPP-033（Bluesky 接続の OAuth 化、[#18](https://github.com/amay077/pppost/issues/18)）は、本移管の**完了後に** Workers 上で実施する。`@atproto/oauth-client-node` の Workers 互換性検証は本移管のタスク 3.6（`bluesky_login` 移植時の検証）と同様のフローで行う
+
 ## Non-Goals
 
 - フロント側での画像縮小（サーバーリサイズ撤廃により Free プランへ落とす最適化）。将来の別 change
@@ -52,4 +57,4 @@ Mastodon 削除（[#29](https://github.com/amay077/pppost/issues/29)）を先に
   - 新規（任意タスク採用時のみ）: `.github/workflows/deploy_worker.yml`（デプロイ自動化。Phase 3 以降）
   - 廃止（Phase 3）: `backend/netlify/`、`backend/netlify.toml`、`backend/script/replace.cjs`、Netlify サイト、`CF_ACCOUNT_ID` / `CF_D1_DATABASE_ID` / `CF_API_TOKEN` / `PPPOST_TWITTER_*` 等の secrets
 - **Breaking changes**: なし（パス互換・データ移行ゼロ。ユーザーの再接続不要）
-- **関連 Issue**: [#27](https://github.com/amay077/pppost/issues/27)
+- **関連 Issue**: [#27](https://github.com/amay077/pppost/issues/27)、[#13](https://github.com/amay077/pppost/issues/13)（backend TS 化は本 change に統合）
