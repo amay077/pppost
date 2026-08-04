@@ -49,7 +49,7 @@ const handler = async (event) => {
     // ユーザー ID は接続時に保管済みのため /api/i は呼ばない
     const userId = stored.meta.user_id;
 
-    // 自分のリプライは Mastodon・Bluesky と同様に候補へ含める。リノートのみ除外する。
+    // 自分のリプライは Bluesky と同様に候補へ含める。リノートのみ除外する。
     const res = await fetch(`${origin}/api/users/notes`, {
       method: 'POST',
       headers: {

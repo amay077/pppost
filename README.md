@@ -1,11 +1,10 @@
 # PPPOST
 
-PPPOST は、Bluesky・Mastodon・Threads・Misskey に一つの画面から同時投稿できるマルチプラットフォーム対応のソーシャルメディア投稿アプリケーションです。Svelte 製フロントエンドと Netlify Functions ベースのバックエンドを備えたモノレポ構成になっています。
+PPPOST は、Bluesky・Threads・Misskey に一つの画面から同時投稿できるマルチプラットフォーム対応のソーシャルメディア投稿アプリケーションです。Svelte 製フロントエンドと Netlify Functions ベースのバックエンドを備えたモノレポ構成になっています。
 
 ## できること
 
-- Bluesky・Mastodon・Threads・Misskey への同時投稿
-  - Mastodon は環境変数で登録したサーバー（mastodon.cloud など）から選択する。他サーバーへの対応希望は issue で相談してください
+- Bluesky・Threads・Misskey への同時投稿
   - Misskey は MiAuth による接続で、任意のホスト（既定値 `misskey.io`）を接続時に入力できる。アプリの事前登録・環境変数の追加は不要
 
 ## 使い方
@@ -30,7 +29,7 @@ PPPOST は、Bluesky・Mastodon・Threads・Misskey に一つの画面から同�
 
 - フロントエンド: Svelte 4、TypeScript、Vite 5、Bootstrap 5、@atproto/api (Bluesky 用)
 - バックエンド: Node.js サーバーレス関数、twitter-api-v2、cheerio/jsdom
-- 認証: Mastodon OAuth (OOB)、Bluesky SDK、Threads OAuth (Meta)、Misskey MiAuth
+- 認証: Bluesky SDK、Threads OAuth (Meta)、Misskey MiAuth
   - 取得したトークンはいずれもサーバー側 (Cloudflare D1) に暗号化保管し、クライアントには匿名セッション ID のみを返す
 
 ## 開発コマンド
@@ -124,7 +123,7 @@ openspec/changes/PPP-005-add-threads-support/  ← proposal (親)
 ## 主要な実装パターン
 
 - 新しいソーシャルプラットフォーム追加  
-  現時点では共通化された手順が確立されていないため、既存の Mastodon/Bluesky/Twitter 実装を参考に個別対応してください。
+  現時点では共通化された手順が確立されていないため、既存の Bluesky/Twitter 実装を参考に個別対応してください。
 - サーバーレス関数の基本形
 
 ```javascript
@@ -146,7 +145,6 @@ exports.handler = async (event, context) => {
 
 - **Twitter/X**: Yahoo リアルタイム検索経由でスクレイピングするため、URL が省略形（`docs.github.com/ja/copilot/get…`）で含まれる場合がある。投稿時刻の正確な取得は不可能。
 - **Bluesky**: Bluesky SDK 経由でプレーンテキストとして取得
-- **Mastodon**: Mastodon API 経由で取得。HTML エンティティ（`&nbsp;`, `&lt;`, `&quot;` など）が含まれる場合がある
 - **Misskey**: Misskey API (`users/notes`) 経由でプレーンテキストとして取得。画像のみのノートは `text` が `null` になるため空文字として扱う
 
 ### リプライ元選択でのグループ化ロジック
@@ -211,7 +209,6 @@ Yahoo リアルタイム検索を利用した Twitter/X のスクレイピング
 
 1. Misskey への投稿は未対応（検討余地あり）
 2. ローカルストレージに保存した接続情報が平文のまま保持される（暗号化未対応）
-3. Mastodon 以外のサーバーへの認証情報テンプレートが未整備（環境変数を追加すれば拡張可能）
 
 ## License
 

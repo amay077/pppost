@@ -174,8 +174,7 @@ const handler = async (event) => {
         texts: {
           default: postText,
           twitter: postText.length > 280 ? postText.substring(0, 277) + '...' : postText,
-          bluesky: postText,
-          mastodon: postText
+          bluesky: postText
         }
       }
     };

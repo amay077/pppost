@@ -4,7 +4,6 @@ import { onMount } from "svelte";
 // @ts-ignore-next-line
 import twitterText from "twitter-text";
 
-import MastodonConnection from "./MastodonConnection.svelte";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import ThreadsConnection from "./ThreadsConnection.svelte";
 import MisskeyConnection from "./MisskeyConnection.svelte";
@@ -29,14 +28,12 @@ let text = loadMessage()?.message ?? '';
 let images: ImageData[] = []; // 新しいデータ構造の配列
 
 let expandedReply = false;
-let replyToIdForMastodon = '';
 let replyToIdForBluesky = '';
 let replyToIdForMisskey = '';
 let replyToPost: PresentedPost = {
   display_posted_at: undefined,
   trimmed_text: '',
   postOfType: {
-    mastodon: undefined,
     bluesky: undefined,
     threads: undefined,
     misskey: undefined,
@@ -328,7 +325,6 @@ const post = async () => {
     const urlsToPost = images.map(img => img.croppedUrl ?? img.originalUrl);
 
     const res = await postToSns(text, urlsToPost, { reply_to_ids: {
-      mastodon: getPostId(replyToPost?.postOfType['mastodon']?.url ?? replyToIdForMastodon),
       bluesky: getPostId(replyToPost?.postOfType['bluesky']?.url ?? replyToIdForBluesky),
       // Threads は permalink 末尾がショートコードで API の投稿 ID と異なるため、
       // getPostId は使わず取得済みの id をそのまま使用する（design.md D1）
@@ -337,14 +333,12 @@ const post = async () => {
     } });
 
     if (res.errors.length == 0) {
-      replyToIdForMastodon = '';
       replyToIdForBluesky = '';
       replyToIdForMisskey = '';
       replyToPost = {
         display_posted_at: undefined,
         trimmed_text: '',
         postOfType: {
-          mastodon: undefined,
           bluesky: undefined,
           threads: undefined,
           misskey: undefined,
@@ -364,7 +358,6 @@ const post = async () => {
 }
 
 const onChangePostSettings = () => {
-  postSettings.mastodon = loadPostSetting('mastodon');
   postSettings.bluesky = loadPostSetting('bluesky');
   postSettings.threads = loadPostSetting('threads');
   postSettings.misskey = loadPostSetting('misskey');
@@ -407,12 +400,6 @@ const getTypes = (post: PresentedPost) => {
 {:else}
 
 <div class="d-flex flex-column gap-2">
-  <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
-    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.mastodon} id="mastodon" disabled={postSettings.mastodon == null}>
-    <div class="w-100">
-      <MastodonConnection on:onChange={onChangePostSettings} />
-    </div>
-  </div>
   <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
     <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.bluesky} id="bluesky" disabled={postSettings.bluesky == null}>
     <div class="w-100">
@@ -462,11 +449,6 @@ const getTypes = (post: PresentedPost) => {
     <span>Posting...</span>
     {:else}
     <div class="d-flex flex-row align-items-center gap-1">
-      {#if postSettings.mastodon != null && postTo.mastodon}
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-mastodon" viewBox="0 0 16 16">
-        <path d="M11.19 12.195c2.016-.24 3.77-1.475 3.99-2.603.348-1.778.32-4.339.32-4.339 0-3.47-2.286-4.488-2.286-4.488C12.062.238 10.083.017 8.027 0h-.05C5.92.017 3.942.238 2.79.765c0 0-2.285 1.017-2.285 4.488l-.002.662c-.004.64-.007 1.35.011 2.091.083 3.394.626 6.74 3.78 7.57 1.454.383 2.703.463 3.709.408 1.823-.1 2.847-.647 2.847-.647l-.06-1.317s-1.303.41-2.767.36c-1.45-.05-2.98-.156-3.215-1.928a3.614 3.614 0 0 1-.033-.496s1.424.346 3.228.428c1.103.05 2.137-.064 3.188-.189zm1.613-2.47H11.13v-4.08c0-.859-.364-1.295-1.091-1.295-.804 0-1.207.517-1.207 1.541v2.233H7.168V5.89c0-1.024-.403-1.541-1.207-1.541-.727 0-1.091.436-1.091 1.296v4.079H3.197V5.522c0-.859.22-1.541.66-2.046.456-.505 1.052-.764 1.793-.764.856 0 1.504.328 1.933.983L8 4.39l.417-.695c.429-.655 1.077-.983 1.934-.983.74 0 1.336.259 1.791.764.442.505.661 1.187.661 2.046v4.203z"/>
-      </svg>
-      {/if}
       {#if postSettings.bluesky != null && postTo.bluesky}
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3.268 64 68.414" width="16" height="16"><path fill="currentColor" d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>
       {/if}
@@ -485,14 +467,12 @@ const getTypes = (post: PresentedPost) => {
   <button class="btn btn-primary-outline" on:click="{() => {
     text = '';
     images = []; // 画像データをクリア
-    replyToIdForMastodon = '';
     replyToIdForBluesky = '';
     replyToIdForMisskey = '';
     replyToPost = {
       display_posted_at: undefined,
       trimmed_text: '',
       postOfType: {
-        mastodon: undefined,
         bluesky: undefined,
         threads: undefined,
         misskey: undefined,
@@ -589,16 +569,6 @@ const getTypes = (post: PresentedPost) => {
   {#if replyToPost.display_posted_at == undefined}
 
   <div class="my-2"> - OR - </div>
-
-  {#if postSettings.mastodon != null && postTo.mastodon}
-  <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">
-    <svg style="width: 18px;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-mastodon" viewBox="0 0 16 16">
-      <path d="M11.19 12.195c2.016-.24 3.77-1.475 3.99-2.603.348-1.778.32-4.339.32-4.339 0-3.47-2.286-4.488-2.286-4.488C12.062.238 10.083.017 8.027 0h-.05C5.92.017 3.942.238 2.79.765c0 0-2.285 1.017-2.285 4.488l-.002.662c-.004.64-.007 1.35.011 2.091.083 3.394.626 6.74 3.78 7.57 1.454.383 2.703.463 3.709.408 1.823-.1 2.847-.647 2.847-.647l-.06-1.317s-1.303.41-2.767.36c-1.45-.05-2.98-.156-3.215-1.928a3.614 3.614 0 0 1-.033-.496s1.424.346 3.228.428c1.103.05 2.137-.064 3.188-.189zm1.613-2.47H11.13v-4.08c0-.859-.364-1.295-1.091-1.295-.804 0-1.207.517-1.207 1.541v2.233H7.168V5.89c0-1.024-.403-1.541-1.207-1.541-.727 0-1.091.436-1.091 1.296v4.079H3.197V5.522c0-.859.22-1.541.66-2.046.456-.505 1.052-.764 1.793-.764.856 0 1.504.328 1.933.983L8 4.39l.417-.695c.429-.655 1.077-.983 1.934-.983.74 0 1.336.259 1.791.764.442.505.661 1.187.661 2.046v4.203z"/>
-    </svg>
-
-    <input class="form-control" type="text" placeholder="Toot URL or ID" bind:value={replyToIdForMastodon}  />    
-  </div>
-  {/if}
 
   {#if postSettings.bluesky != null && postTo.bluesky}            
   <div style="width: 100%;" class="d-flex flex-row align-items-center gap-1">

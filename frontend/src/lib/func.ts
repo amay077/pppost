@@ -1,10 +1,3 @@
-export type SettingDataMastodon = {
-  type: 'mastodon',
-  title: 'Mastodon',
-  enabled: boolean,
-  server: string,
-};
-
 export type SettingDataBluesky = {
   type: 'bluesky',
   title: 'Bluesky',
@@ -28,12 +21,11 @@ export type SettingDataMisskey = {
   username: string,
 };
 
-export type SettingData = SettingDataMastodon | SettingDataBluesky | SettingDataThreads | SettingDataMisskey;
+export type SettingData = SettingDataBluesky | SettingDataThreads | SettingDataMisskey;
 
 export type SettingType = SettingData['type'];
 
 export type SettingDataType<T extends SettingType> =
-  T extends 'mastodon' ? SettingDataMastodon :
   T extends 'threads' ? SettingDataThreads :
   T extends 'misskey' ? SettingDataMisskey :
   SettingDataBluesky;

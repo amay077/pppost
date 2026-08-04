@@ -1,7 +1,7 @@
 const { extractSessionId } = require('../lib/session');
 const { deleteToken } = require('../lib/token-store');
 
-const SNS_TYPES = ['threads', 'mastodon', 'bluesky', 'misskey'];
+const SNS_TYPES = ['threads', 'bluesky', 'misskey'];
 
 const handler = async (event) => {
   const headers = {

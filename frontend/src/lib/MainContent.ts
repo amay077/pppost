@@ -1,5 +1,5 @@
 import { Config } from "../config";
-import { type SettingDataMastodon, type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
+import { type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
 import dayjs from "dayjs";
 import { uploadImageToStorage } from "./storage-client";
 
@@ -37,19 +37,16 @@ export interface ImageData {
 }
 
 export const postSettings: {
-  mastodon: SettingDataMastodon | null,
   bluesky: SettingDataBluesky | null,
   threads: SettingDataThreads | null,
   misskey: SettingDataMisskey | null,
 } = {
-  mastodon: loadPostSetting('mastodon'),
   bluesky: loadPostSetting('bluesky'),
   threads: loadPostSetting('threads'),
   misskey: loadPostSetting('misskey'),
 };
 
 export const postTo: { [K in SettingType]: boolean } = {
-  mastodon: postSettings?.mastodon?.enabled ?? false,
   bluesky: postSettings?.bluesky?.enabled ?? false,
   threads: postSettings?.threads?.enabled ?? false,
   misskey: postSettings?.misskey?.enabled ?? false,
@@ -91,9 +88,6 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
   
   for (const type of enableTypes) {
     switch (type) {
-    case 'mastodon':
-      promises.push(loadMyPostsMastodon().then(posts => ({ type: 'mastodon', posts })));
-      break;
     case 'bluesky':
       promises.push(loadMyPostsBluesky().then(posts => ({ type: 'bluesky', posts })));
       break;
@@ -194,7 +188,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
           group: {
             display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
             trimmed_text: trimText(post.text),
-            postOfType: { mastodon: undefined, bluesky: undefined, threads: undefined, misskey: undefined }
+            postOfType: { bluesky: undefined, threads: undefined, misskey: undefined }
           },
           times: [],
         };
@@ -219,7 +213,6 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
 }
 
 export const postToSns = async (text: string, imageDataURLs: string[], options: { reply_to_ids: {
-  mastodon: string,
   bluesky: string,
   threads: string,
   misskey: string,
@@ -251,9 +244,6 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   
   for (const type of enableTypes) {
     switch (type) {
-    case 'mastodon':
-      promises.push(postToMastodon(text, uploadedImageUrls, options?.reply_to_ids?.mastodon).then((r) => { if (!r) errors.push('Mastodon') }));
-      break;
     case 'bluesky':
       promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
@@ -283,33 +273,6 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   }
 
   return { errors };
-};
-
-
-const postToMastodon = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
-  try {
-    const status = text;
-
-    // host / token はサーバーがセッションから復号して使用するため、クライアントは送らない
-    const res = await fetch(`${Config.API_ENDPOINT}/mastodon_post`, {
-      method: 'POST',
-      headers: buildAuthHeaders('text/plain'),
-      body: JSON.stringify({
-        status,
-        images: imageUrls,
-        reply_to_id
-      }),
-    });
-
-    if (res.ok) {
-    } else {
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.error(`postToMastodon -> error:`, error);
-    return false;
-  }
 };
 
 
@@ -414,27 +377,6 @@ const loadMyPostsBluesky = async (): Promise<Post[]> => {
     return [];
   }
 };
-
-const loadMyPostsMastodon = async (): Promise<Post[]> => {
-  try {
-    const res = await fetch(`${Config.API_ENDPOINT}/mastodon_posts`, {
-      method: 'POST',
-      headers: buildAuthHeaders('text/plain'),
-      body: JSON.stringify({}),
-    });
-
-    if (res.ok) {
-      const resJson = await res.json();
-      return resJson;
-    } else {
-      return [];
-    }
-  } catch (error) {
-    console.error(`loadMyPostsMastodon -> error:`, error);
-    return [];
-  }
-};
-
 
 const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: string): Promise<boolean> => {
   try {
