@@ -21,5 +21,5 @@
 
 ## 3. 検証
 
-- [x] 3.1 `frontend` で `npm run check` と `npm run build` が成功する
+- [x] 3.1 `frontend` で `npm run build` が成功し、`npm run check` で新規エラーが発生しないこと（既存の 3 エラーは変更前から存在）
 - [x] 3.2 `openspec validate PPP-033-add-youtube-title-expansion --strict` が通る

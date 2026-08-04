@@ -335,7 +335,7 @@ onMount(async () => {
     }
 
     // YouTube URL の検出と特別整形（Swarm 処理の次、一般的なタイトル取得より優先）
-    let youtubeHandled = false;
+    // タイトル取得に失敗した場合も本文は変換せず、一般的なタイトル取得（{タイトル} - {URL}）へフォールスルーしない
     const youtubeUrl = resolveYouTubeUrl(text);
     if (youtubeUrl) {
       console.log('YouTube URL detected:', youtubeUrl);
@@ -343,13 +343,12 @@ onMount(async () => {
       if (youtubeTitle) {
         text = `${youtubeTitle} ${youtubeUrl}`;
         console.log('YouTube title fetched:', text);
-        youtubeHandled = true;
       } else {
         console.warn('Failed to fetch YouTube title for:', youtubeUrl);
       }
     }
 
-    if (!swarmHandled && !youtubeHandled && queryValueUsed) {
+    if (!swarmHandled && !youtubeUrl && queryValueUsed) {
       const plainUrl = extractUrlOnly(queryValueUsed);
       if (plainUrl) {
         const title = await fetchTitleForUrl(plainUrl);
