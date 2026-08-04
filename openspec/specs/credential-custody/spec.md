@@ -1,7 +1,7 @@
 # credential-custody Specification
 
 ## Purpose
-TBD - created by archiving change PPP-014-server-side-token-custody. Update Purpose after archive.
+SNS 接続で得たトークンのサーバー側での安全な保管・利用・削除の仕組みを定める。トークン（Threads の長命トークン、Bluesky の session データ、Misskey の MiAuth アクセストークン）は Cloudflare D1 に AES 暗号化して保管し、クライアントには匿名セッション ID のみを返す。投稿・自投稿取得・切断などのトークンを要する操作は、セッション ID に紐づく保管トークンを復号してサーバーが実行する。
 ## Requirements
 ### Requirement: サーバー発行の匿名セッション（Server-issued anonymous session）
 
@@ -80,3 +80,4 @@ TBD - created by archiving change PPP-014-server-side-token-custody. Update Purp
 
 - [2026-07-06-PPP-014-server-side-token-custody](../../changes/archive/2026-07-06-PPP-014-server-side-token-custody/proposal.md)
 - [2026-08-01-PPP-025-add-misskey-posting](../../changes/archive/2026-08-01-PPP-025-add-misskey-posting/proposal.md)
+- [2026-08-04-PPP-029-remove-mastodon-posting](../../changes/archive/2026-08-04-PPP-029-remove-mastodon-posting/proposal.md)

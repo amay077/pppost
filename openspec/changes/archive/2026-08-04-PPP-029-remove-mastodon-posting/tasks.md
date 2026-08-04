@@ -53,9 +53,9 @@
 
 ## 8. アーカイブ時
 
-- [ ] 8.1 `openspec/specs/image-upload/` を削除する（唯一の要件が REMOVED となり capability 廃止のため。archive が空 spec を残す場合は手動で削除し、`openspec validate --all --strict` で確認する）
-- [ ] 8.2 `openspec/specs/sns-posting/spec.md` の `## Purpose` から Mastodon を除去する
-- [ ] 8.3 `openspec/specs/credential-custody/spec.md` の `## Purpose`（TBD のまま）を実内容へ更新し、対象 SNS を Threads・Bluesky・Misskey とする
-- [ ] 8.4 `openspec/specs/PPP-004-reply-selection/spec.md` の `## Purpose` から Mastodon を除去する
-- [ ] 8.5 `openspec/specs/misskey-posting/spec.md` の `## Purpose` の「Mastodon・Bluesky・Threads に Misskey を追加する」を現状に合わせて更新する
-- [ ] 8.6 各 spec の `## Related Changes` に本 change を追記する
+- [x] 8.1 `openspec/specs/image-upload/` を削除する（唯一の要件が REMOVED となり capability 廃止のため。archive が空 spec を残す場合は手動で削除し、`openspec validate --all --strict` で確認する）
+- [x] 8.2 `openspec/specs/sns-posting/spec.md` の `## Purpose` から Mastodon を除去する
+- [x] 8.3 `openspec/specs/credential-custody/spec.md` の `## Purpose`（TBD のまま）を実内容へ更新し、対象 SNS を Threads・Bluesky・Misskey とする
+- [x] 8.4 `openspec/specs/PPP-004-reply-selection/spec.md` の `## Purpose` から Mastodon を除去する
+- [x] 8.5 `openspec/specs/misskey-posting/spec.md` の `## Purpose` の「Mastodon・Bluesky・Threads に Misskey を追加する」を現状に合わせて更新する
+- [x] 8.6 各 spec の `## Related Changes` に本 change を追記する

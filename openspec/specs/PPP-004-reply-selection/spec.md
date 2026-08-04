@@ -1,7 +1,7 @@
 # PPP-004-reply-selection Specification
 
 ## Purpose
-リプライ元選択ドロップダウンにおいて、同一内容の投稿を複数の SNS（Mastodon、Bluesky、Threads、Misskey）にまたがって適切にグループ化し、ユーザーが同じ投稿を重複して選択する必要をなくす。テキストの正規化により、URL や HTML タグ、空白の違いを吸収し、本文の内容が同一であれば1つのグループとして表示する。ただし、正規化後の内容が一致していても投稿時刻が離れている投稿は別グループとして扱い、同じ場所への再訪時のチェックイン投稿など内容が完全一致する過去の投稿もリプライ元として選べるようにする。これにより、リプライ投稿時の UX を向上させる。
+リプライ元選択ドロップダウンにおいて、同一内容の投稿を複数の SNS（Bluesky、Threads、Misskey）にまたがって適切にグループ化し、ユーザーが同じ投稿を重複して選択する必要をなくす。テキストの正規化により、URL や HTML タグ、空白の違いを吸収し、本文の内容が同一であれば1つのグループとして表示する。ただし、正規化後の内容が一致していても投稿時刻が離れている投稿は別グループとして扱い、同じ場所への再訪時のチェックイン投稿など内容が完全一致する過去の投稿もリプライ元として選べるようにする。これにより、リプライ投稿時の UX を向上させる。
 ## Requirements
 ### Requirement: 投稿の内容別グループ化
 
@@ -96,3 +96,4 @@
 - [2026-08-01-PPP-025-add-misskey-posting](../../changes/archive/2026-08-01-PPP-025-add-misskey-posting/proposal.md)
 - [2026-08-02-PPP-026-group-reply-candidates-by-time](../../changes/archive/2026-08-02-PPP-026-group-reply-candidates-by-time/proposal.md)
 - [2026-08-04-PPP-030_add-hashtag-normalization](../../changes/archive/2026-08-04-PPP-030_add-hashtag-normalization/proposal.md)
+- [2026-08-04-PPP-029-remove-mastodon-posting](../../changes/archive/2026-08-04-PPP-029-remove-mastodon-posting/proposal.md)

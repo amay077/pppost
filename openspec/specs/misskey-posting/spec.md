@@ -1,7 +1,7 @@
 # misskey-posting Specification
 
 ## Purpose
-MiAuth + Misskey ネイティブ API を用いた Misskey アカウント接続・テキスト/画像/リプライ投稿・自投稿取得機能の仕様。接続先インスタンスはユーザーがホスト名で指定し（既定値 `misskey.io`）、アプリの事前登録・環境変数の追加を要さない。投稿対象 SNS として Mastodon・Bluesky・Threads に Misskey を追加する。
+MiAuth + Misskey ネイティブ API を用いた Misskey アカウント接続・テキスト/画像/リプライ投稿・自投稿取得機能の仕様。接続先インスタンスはユーザーがホスト名で指定し（既定値 `misskey.io`）、アプリの事前登録・環境変数の追加を要さない。投稿対象 SNS として Bluesky・Threads に Misskey を追加する。
 ## Requirements
 ### Requirement: Misskey アカウント接続（Connect Misskey account via MiAuth）
 
@@ -105,7 +105,7 @@ Misskey は本文と添付ファイルの双方が空のノートを受け付け
 - **AND** 画像を添付しておらず、リプライ元も選択していない
 - **WHEN** 投稿ボタンを押下する
 - **THEN** `notes/create` により本文のみのノートが公開範囲 `public` で作成される
-- **AND** Mastodon・Bluesky・Threads など他の選択中 SNS への投稿と並行して成功通知が表示される
+- **AND** Bluesky・Threads など他の選択中 SNS への投稿と並行して成功通知が表示される
 
 #### Scenario: 投稿に失敗する（Post fails）
 
@@ -126,7 +126,7 @@ Misskey は本文と添付ファイルの双方が空のノートを受け付け
 
 `notes/create` の `fileIds` は空配列を受け付けないため、システムは添付画像がない場合に `fileIds` を送信してはならない (SHALL NOT)。
 
-misskey.io のファイルサイズ上限は 500 MB であり、本アプリが扱う画像がこれを超えることはないため、システムは Mastodon 向けに実装されている 5 MB 超過時の自動リサイズ（`image-upload` capability）を Misskey への投稿に適用してはならない (SHALL NOT)。
+misskey.io のファイルサイズ上限は 500 MB であり、本アプリが扱う画像がこれを超えることはないため、システムは Misskey への投稿で画像の自動リサイズ・形式変換を行ってはならない (SHALL NOT)。
 
 いずれかの画像のアップロードに失敗した場合、システムはノートを作成してはならず (SHALL NOT)、その投稿全体を失敗として扱い、エラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
 
@@ -159,9 +159,9 @@ misskey.io のファイルサイズ上限は 500 MB であり、本アプリが�
 
 ### Requirement: Misskey の自投稿取得（Fetch own Misskey posts）
 
-システムは、ユーザーがリプライ元選択 UI を展開したとき、Misskey に接続済みであれば、バックエンド経由で `POST https://{host}/api/users/notes` を呼び出して自投稿一覧を取得し、Mastodon・Bluesky・Threads の自投稿と同様にリプライ元候補として表示しなければならない (SHALL)。
+システムは、ユーザーがリプライ元選択 UI を展開したとき、Misskey に接続済みであれば、バックエンド経由で `POST https://{host}/api/users/notes` を呼び出して自投稿一覧を取得し、Bluesky・Threads の自投稿と同様にリプライ元候補として表示しなければならない (SHALL)。
 
-対象ユーザーの識別子は、接続時に保管した表示用メタ（`user.id`）から解決しなければならない (SHALL)。リプライ元候補として不適切であるため、システムはリノート（`withRenotes`）を取得対象に含めてはならない (SHALL NOT)。一方、Mastodon（`exclude_replies` を指定しない）・Bluesky（`getAuthorFeed` の既定 `posts_with_replies`）が自分のリプライを候補に含めているため、システムは自分のリプライ（`withReplies`）を取得対象に含めなければならない (SHALL)。これにより、スレッドの 2 通目以降へ連ねる運用と、`PPP-004-reply-selection` のグループ化における他 SNS との候補集合の一致が保たれる。
+対象ユーザーの識別子は、接続時に保管した表示用メタ（`user.id`）から解決しなければならない (SHALL)。リプライ元候補として不適切であるため、システムはリノート（`withRenotes`）を取得対象に含めてはならない (SHALL NOT)。一方、Bluesky（`getAuthorFeed` の既定 `posts_with_replies`）が自分のリプライを候補に含めているため、システムは自分のリプライ（`withReplies`）を取得対象に含めなければならない (SHALL)。これにより、スレッドの 2 通目以降へ連ねる運用と、`PPP-004-reply-selection` のグループ化における他 SNS との候補集合の一致が保たれる。
 
 取得した各投稿について、システムはノート ID と、`https://{host}/notes/{noteId}` 形式の URL を保持しなければならない (SHALL)。画像のみのノートは `text` が `null` となるため、システムは本文を空文字として扱わなければならず (SHALL)、`text` を持たない投稿を候補から除外したり、処理を中断したりしてはならない (SHALL NOT)。
 
@@ -192,7 +192,7 @@ Misskey の自投稿取得に失敗した場合でも、システムは他の SN
 
 - **GIVEN** ユーザーが Misskey に接続済みで投稿対象チェックボックスが ON だが、Misskey の自投稿取得が失敗する状態である
 - **WHEN** リプライ元選択 UI を展開する
-- **THEN** Mastodon・Bluesky・Threads の自投稿候補は従来通り表示される
+- **THEN** Bluesky・Threads の自投稿候補は従来通り表示される
 - **AND** リプライ元選択 UI のローディング表示は解除される
 
 #### Scenario: 画像のみの自投稿を候補に含める（Image-only note appears as candidate）
@@ -281,3 +281,4 @@ Misskey のノート URL は `https://{host}/notes/{noteId}` であり、末尾�
 
 - [2026-08-01-PPP-025-add-misskey-posting](../../changes/archive/2026-08-01-PPP-025-add-misskey-posting/proposal.md)
 - [2026-08-04-PPP-032_add-quote-posting](../../changes/archive/2026-08-04-PPP-032_add-quote-posting/proposal.md)
+- [2026-08-04-PPP-029-remove-mastodon-posting](../../changes/archive/2026-08-04-PPP-029-remove-mastodon-posting/proposal.md)
