@@ -137,6 +137,11 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
       normalized = normalized.replace(new RegExp(entity, 'g'), char);
     }
 
+    // ハッシュタグの # 記号を除去
+    // Threads は # をカテゴリ化して投稿文から # のみ削除するため、比較キーから # を除外する
+    // （キーワード自体は残す。URL 除去が先行するので URL のフラグメント # と衝突しない）
+    normalized = normalized.replace(/#(?=[\p{L}\p{N}_])/gu, '');
+
     // 連続する空白文字を1つに統一
     normalized = normalized.replace(/\s+/g, ' ');
 
