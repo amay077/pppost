@@ -10,8 +10,9 @@ version 表示（`MainContent.svelte:623-631`、version ボタン押下で表示
 
 ### バージョン差分の検知
 
-- ビルド時に生成済みの `frontend/public/version.json`（`replace.cjs` が生成、`built_at` 入り、`dist/` 経由で GitHub Pages に配置済み）を SPA リソースとして利用する
+- ビルド時に生成済みの `frontend/public/version.json`（`frontend/script/replace.cjs` が生成、`built_at` 入り、`dist/` 経由で GitHub Pages に配置済み）を SPA リソースとして利用する
 - version 表示を開いたとき、`version.json?v=<現在日時>` をキャッシュバスター付きで fetch し、サーバ側の `built_at` と現在の SPA の `built_at`（`window.built_at`。`index.mustache` で注入）を比較する
+- `version.json` は現在の index.html と同一ディレクトリの相対パスで取得する（`vite base: "./"` により、デプロイ先パス（`/pppost/` 等）に依存しない）
 - ISO 8601 文字列の比較は両者が同一生成源（`replace.cjs` の同一 `built_at`）のため、文字列比較で判定可能
 
 ### UI
@@ -24,6 +25,7 @@ version 表示（`MainContent.svelte:623-631`、version ボタン押下で表示
 
 - PWA サービスワーカーによる更新検知（vite-plugin-pwa は導入済みだが SW 未登録のため、本変更では使用しない）
 - バックグラウンドでの定期ポーリング（チェックは version 表示時のみ）
+- 更新後の URL に残る `?v=` クエリの除去（`history.replaceState` による整形）は行わない
 
 ## Impact
 

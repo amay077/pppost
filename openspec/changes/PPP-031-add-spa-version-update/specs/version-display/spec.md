@@ -1,7 +1,7 @@
 ## ADDED Requirements
 ### Requirement: SPA 更新の検知
 
-version 表示を開いたとき、システムはキャッシュバスター付きクエリ（`?v=<現在日時>`）を付加した `version.json` を取得し、サーバ側の `built_at` と現在読み込まれている SPA の `built_at`（`window.built_at`）を比較しなければならない (SHALL)。サーバ側が新しい場合のみ、更新が利用可能であると判定しなければならない (SHALL)。
+version 表示を開いたとき、システムはキャッシュバスター付きクエリ（`?v=<現在日時>`）を付加した `version.json` を取得し、サーバ側の `built_at` と現在読み込まれている SPA の `built_at`（`window.built_at`）を比較しなければならない (SHALL)。サーバ側が新しい場合のみ、更新が利用可能であると判定しなければならない (SHALL)。現在の SPA の `built_at` が取得できない（空文字等）場合、システムは更新が利用可能であると判定してはならない (SHALL)。
 
 #### Scenario: 新バージョンが存在する場合
 
@@ -9,9 +9,9 @@ version 表示を開いたとき、システムはキャッシュバスター付
 - **WHEN** version 表示を開く
 - **THEN** `spa_build` 行に「更新」ボタンが表示される
 
-#### Scenario: バージョンが最新の場合
+#### Scenario: バージョンが最新または古い場合
 
-- **GIVEN** サーバ側の `built_at` が現在の SPA の `built_at` と同じ
+- **GIVEN** サーバ側の `built_at` が現在の SPA の `built_at` と同じか古い
 - **WHEN** version 表示を開く
 - **THEN** 「更新」ボタンは表示されない
 
