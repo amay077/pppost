@@ -44,3 +44,4 @@ ERROR  threads publish failed: 400 {"error":{"message":"The requested resource d
 - **Affected specs**: threads-posting（「公開前のコンテナ処理完了待ち」要件を更新）
 - **Affected code**: `backend/netlify/functions/threads_post.js` のみ
 - **Breaking changes**: なし
+- **関連 Issue**: [#35](https://github.com/amay077/pppost/issues/35)
