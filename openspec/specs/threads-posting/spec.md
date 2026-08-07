@@ -57,6 +57,8 @@ Threads のメディアコンテナは Meta 側で非同期に処理されるた
 
 バックエンドの実行時間制約（Netlify 同期 Function の実行時間制限）に収めるため、システムは 1 回の呼び出しに対する実行時間予算を定め、コンテナの完了待ちをその予算内に収めなければならない (SHALL)。予算は子コンテナの待機・トップレベルコンテナの待機・PR ゴースト投稿で共有し、投稿ごとに独立して消費してはならない (SHALL NOT)。予算内に `FINISHED` にならない場合、システムはその投稿を失敗として扱わなければならない (SHALL)。
 
+コンテナの完了待機後であっても、公開（`threads_publish`）が `code:24 / subcode:4279009` "Media Not Found" で失敗することがある（Meta 側の非同期伝播に起因する既知の問題である）。システムは公開がこのエラーで失敗した場合、実行時間予算が残っている場合に限り、コンテナを作り直してコンテナ作成から公開までのフローを再実行しなければならない (SHALL)。再試行は初回を含めて最大 3 回とする（再試行は最大 2 回）。予算が不足している場合、または再試行を尽くしても失敗した場合、システムはその投稿を失敗として扱わなければならない (SHALL)。再試行は同一 `creation_id` での公開再試行ではなく、新たにコンテナを作成して行わなければならない (SHALL NOT)。`code:24 / subcode:4279009` 以外の公開失敗については再試行してはならない (SHALL NOT)。
+
 #### Scenario: コンテナ処理完了後に公開する（Publish after container becomes FINISHED）
 
 - **GIVEN** ユーザーが Threads を投稿対象に選択し、本文を入力している
@@ -86,6 +88,24 @@ Threads のメディアコンテナは Meta 側で非同期に処理されるた
 - **AND** コンテナの処理が実行時間予算内に `FINISHED` にならない状態である
 - **WHEN** 投稿ボタンを押下する
 - **THEN** バックエンドは待機を打ち切り、公開を行わずに Threads 投稿を失敗として扱う
+- **AND** エラー一覧に `Threads` が含まれ、ユーザーへ投稿失敗が通知される
+
+#### Scenario: 公開が一時エラーで失敗し、コンテナ再作成で成功する（Publish fails transiently and succeeds after recreating container）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択し、本文を入力している
+- **AND** コンテナは `FINISHED` まで待機済みである
+- **AND** 公開（`threads_publish`）が `code:24 / subcode:4279009` "Media Not Found" で失敗する状態である
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドはコンテナを作り直し、コンテナ作成から公開までのフローを再実行する
+- **AND** 再試行で公開が成功し、投稿が成功する
+
+#### Scenario: 再試行を尽くしても失敗する（Fails after exhausting retries）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択している
+- **AND** 公開（`threads_publish`）が `code:24 / subcode:4279009` "Media Not Found" で失敗し続ける状態である
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドは初回を含めて最大 3 回までコンテナを作り直して再試行する
+- **AND** すべての試行が失敗した場合、Threads 投稿は失敗として扱われる
 - **AND** エラー一覧に `Threads` が含まれ、ユーザーへ投稿失敗が通知される
 
 ### Requirement: Threads 本文の文字数上限（Threads text length limit）
@@ -402,3 +422,4 @@ Threads の自投稿取得に失敗した場合でも、システムは Mastodon
 - [2026-07-06-PPP-014-server-side-token-custody](../../changes/archive/2026-07-06-PPP-014-server-side-token-custody/proposal.md)
 - [2026-08-04-PPP-028-fix-threads-carousel-children](../../changes/archive/2026-08-04-PPP-028-fix-threads-carousel-children/proposal.md)
 - [2026-08-04-PPP-032_add-quote-posting](../../changes/archive/2026-08-04-PPP-032_add-quote-posting/proposal.md)
+- [2026-08-07-PPP-035_add-threads-publish-retry](../../changes/archive/2026-08-07-PPP-035_add-threads-publish-retry/proposal.md)
