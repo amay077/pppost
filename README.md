@@ -84,6 +84,7 @@ npm run dev         # Netlify Functions を http://localhost:9000 で起動
 **Change ID (Proposal ID):**
 - 形式: `PPP-{TASK_ID}-{descriptive-name}`
 - 例: `PPP-005-add-threads-support`
+- **TASK_ID は GitHub Issue の番号と一致させる**。GitHub では Issue と Pull Request が同一の番号空間を共有するため、TASK_ID は次に作成する Issue の番号（未使用の最小番号）を先読みして決定する。例: PR #34 が存在する場合、次に作成される Issue は #35 になるため TASK_ID は `35` とする
 
 **Spec Directory Name:**
 - 形式: `PPP-{TASK_ID}-{descriptive-name}`
