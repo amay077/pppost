@@ -15,6 +15,10 @@ const CHILD_WAIT_BUDGET_MS = 5000;
 const GHOST_MIN_BUDGET_MS = 2000;
 // コンテナ状態のポーリング間隔
 const POLL_INTERVAL_MS = 500;
+// 公開（threads_publish）の最大試行回数（初回 + コンテナ再作成リトライ 2 回）
+const MAX_PUBLISH_ATTEMPTS = 3;
+// 公開のコンテナ再作成リトライを試行するために必要な残り時間
+const RETRY_MIN_BUDGET_MS = 2000;
 
 const errorResponse = (statusCode, error) => ({
   statusCode,
@@ -88,7 +92,23 @@ const waitForContainerReady = async (creation_id, token, deadline) => {
   return false;
 };
 
-// creation_id を公開する。成功時 true、失敗時 false
+// 公開失敗時のエラーボディが再試行対象（code:24 / subcode:4279009 "Media Not Found"）か判定する
+// status=FINISHED を確認済みでも、Meta 側の非同期伝播により公開がこのエラーで失敗することがある。
+// is_transient:false を返すが、コミュニティの報告（fbsamples/threads_api#70 等）では
+// コンテナを作り直しての再試行で成功するため、このエラーのみ再試行対象とする。
+const isTransientPublishError = (bodyText) => {
+  try {
+    const json = JSON.parse(bodyText);
+    return json.error != null
+      && json.error.code === 24
+      && json.error.error_subcode === 4279009;
+  } catch {
+    return false;
+  }
+};
+
+// creation_id を公開する。成功時 { ok: true }、失敗時 { ok: false, retryable }。
+// retryable は上記の一時的失敗（4279009）で、コンテナを作り直して再試行すれば成功しうることを表す。
 const publishContainer = async (creation_id, token) => {
   const res = await fetch(`${THREADS_API_BASE}/me/threads_publish`, {
     method: 'POST',
@@ -99,17 +119,19 @@ const publishContainer = async (creation_id, token) => {
   });
 
   if (!res.ok) {
-    console.error(`threads publish failed: ${res.status}`, await res.text());
-    return false;
+    const bodyText = await res.text();
+    console.error(`threads publish failed: ${res.status}`, bodyText);
+    return { ok: false, retryable: isTransientPublishError(bodyText) };
   }
 
-  return true;
+  return { ok: true };
 };
 
 // Threads へ 1 件投稿する。成功時 { ok: true }、失敗時 { ok: false, statusCode, error }。
+// 公開が一時的失敗（code:24 / subcode:4279009）で失敗した場合のみ retryable: true を返す。
 // isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
 // deadline は絶対時刻（ミリ秒）で、この投稿に使える実行時間の上限を表す。
-const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline }) => {
+const doThreadsPostOnce = async ({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline }) => {
   // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
   const replyParams = (reply_to_id != null && reply_to_id !== '')
     ? { reply_to_id }
@@ -217,11 +239,45 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, quote_to_id,
 
   // 公開
   const published = await publishContainer(creation_id, token);
-  if (!published) {
-    return { ok: false, statusCode: 500, error: 'failed to publish threads' };
+  if (!published.ok) {
+    return {
+      ok: false,
+      statusCode: 500,
+      error: 'failed to publish threads',
+      retryable: published.retryable === true,
+    };
   }
 
   return { ok: true };
+};
+
+// Threads へ 1 件投稿する。成功時 { ok: true }、失敗時 { ok: false, statusCode, error }。
+// 公開が code:24 / subcode:4279009 "Media Not Found" で失敗した場合は、Meta 側の非同期伝播による
+// 一時的失敗として、実行時間予算が残る範囲でコンテナを作り直して再試行する（初回を含めて最大 3 回）。
+// それ以外の失敗は 1 回で失敗とする。
+// isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
+// deadline は絶対時刻（ミリ秒）で、この投稿に使える実行時間の上限を表す。
+const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline }) => {
+  let lastResult;
+
+  for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
+    // 2 回目以降はコンテナを作り直しての再試行。予算が残っていなければ試行せず失敗で打ち切る
+    if (attempt > 1) {
+      if (Date.now() + RETRY_MIN_BUDGET_MS >= deadline) {
+        console.warn('threads publish retry skipped: insufficient time budget remaining');
+        break;
+      }
+      console.warn(`threads publish failed transiently; retrying with a new container (attempt ${attempt}/${MAX_PUBLISH_ATTEMPTS})`);
+    }
+
+    lastResult = await doThreadsPostOnce({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline });
+
+    if (lastResult.ok || lastResult.retryable !== true) {
+      break;
+    }
+  }
+
+  return lastResult;
 };
 
 // PR ゴースト投稿を条件判定のうえサーバー側で実行する。
