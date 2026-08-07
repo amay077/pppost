@@ -23,7 +23,7 @@
 
 - [x] 4.1 `node --check backend/netlify/functions/threads_post.js` が通る
 - [ ] 4.2 デプロイ後に本番ログでリトライ発生（`console.warn`）→ 成功を確認する
-- [x] 4.3 `npx openspec validate PPP-034_add-threads-publish-retry --strict` が通る
+- [x] 4.3 `npx openspec validate PPP-035_add-threads-publish-retry --strict` が通る
 
 ## 5. アーカイブ時
 
