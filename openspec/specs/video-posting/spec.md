@@ -1,8 +1,7 @@
 # video-posting Specification
 
 ## Purpose
-Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上限チェック・R2 への一時アップロード・各 SNS への投稿・共有シートからの動画共有を定める。
-
+TBD - created by archiving change PPP-036-add-video-posting. Update Purpose after archive.
 ## Requirements
 ### Requirement: 動画の選択とプレビュー（Select and preview video）
 
@@ -214,4 +213,3 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 - **THEN** 失敗した SNS 名がエラー一覧に追加され、ユーザーへ通知される
 - **AND** 成功した SNS の投稿は成功として通知される
 
-## Related Changes

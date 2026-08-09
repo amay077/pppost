@@ -1,0 +1,217 @@
+# video-posting Specification
+
+## Purpose
+Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上限チェック・R2 への一時アップロード・各 SNS への投稿・共有シートからの動画共有を定める。
+
+## ADDED Requirements
+### Requirement: 動画の選択とプレビュー（Select and preview video）
+
+システムは、ユーザーが投稿画面で動画ファイル（`video/mp4` を想定）を選択できる UI を提供しなければならない (SHALL)。選択した動画は `<video>` 要素でプレビュー表示しなければならない (SHALL)。選択可能な動画は 1 本のみとし、動画を添付した状態では画像を追加できず (SHALL NOT)、画像が添付された状態では動画を追加できないものとする (SHALL NOT)。動画を削除して取り除くことはできるものとする (SHALL)。
+
+#### Scenario: 動画を選択してプレビューする（Select a video and preview it）
+
+- **GIVEN** ユーザーが投稿画面で動画ファイルを選択する
+- **WHEN** 動画ファイルの選択が完了する
+- **THEN** 選択された動画が `<video>` 要素でプレビュー表示される
+- **AND** 投稿時にその動画が添付される
+
+#### Scenario: 動画添付中は画像を追加できない（Cannot add images while a video is attached）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **WHEN** 画像を追加しようとする
+- **THEN** 画像の追加は受け付けられない
+
+#### Scenario: 画像添付中は動画を追加できない（Cannot add a video while images are attached）
+
+- **GIVEN** ユーザーが画像を添付済みである
+- **WHEN** 動画を追加しようとする
+- **THEN** 動画の追加は受け付けられない
+
+#### Scenario: 動画を削除する（Remove the video）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **WHEN** 動画の削除操作を行う
+- **THEN** 動画が添付から取り除かれ、プレビューが消える
+
+### Requirement: 動画の許容上限チェック（Validate video size and duration）
+
+システムは、選択された動画が 100MB を超える場合、または再生時間が 3 分（180 秒）を超える場合、その動画を添付として受け付けず、ユーザーにエラーを通知しなければならない (SHALL)。この上限チェックは動画の選択時（アップロード前）に行わなければならない (SHALL)。再生時間の取得ができない場合（メタデータ読み取り失敗など）、システムは動画を添付として受け付けてはならず (SHALL NOT)、ユーザーにエラーを通知しなければならない (SHALL)。再生時間の上限は投稿対象 SNS のうち最も厳しい制限（Bluesky の 3 分、2026 年時点の公式制限）に合わせたものである。Bluesky の制限が今後変更された場合、システムはその制限を確認して上限を更新しなければならない (SHALL)。
+
+#### Scenario: 上限を超えるサイズの動画（Video exceeds 100MB）
+
+- **GIVEN** ユーザーが 100MB を超える動画ファイルを選択する
+- **WHEN** 動画の選択が完了する
+- **THEN** 動画は添付されず、サイズ上限超過のエラーがユーザーに通知される
+
+#### Scenario: 上限を超える再生時間の動画（Video exceeds 3 minutes）
+
+- **GIVEN** ユーザーが再生時間 3 分を超える動画ファイルを選択する
+- **WHEN** 動画の選択が完了する
+- **THEN** 動画は添付されず、再生時間上限超過のエラーがユーザーに通知される
+
+#### Scenario: 再生時間を取得できない動画（Video metadata cannot be read）
+
+- **GIVEN** ユーザーが再生時間を取得できない動画ファイルを選択する
+- **WHEN** 動画の選択が完了する
+- **THEN** 動画は添付されず、動画を読み込めない旨のエラーがユーザーに通知される
+
+### Requirement: 動画の一時アップロードと削除（Upload video to temporary storage）
+
+システムは、動画を R2 の一時ストレージへアップロードするために、バックエンドの署名付き URL 発行 API（`r2_presigned_url`）を利用しなければならない (SHALL)。動画の Content-Type は拡張子から解決し、署名付き URL 生成時の Content-Type と PUT 時の Content-Type を一致させなければならない (SHALL)。動画オブジェクトは `pppost/video/` プレフィックス配下に保存しなければならない (SHALL)。動画アップロードは base64 化を介さず、File/Blob のまま直接 PUT しなければならない (SHALL NOT)。アップロード済み動画の削除は、R2 バケットのライフサイクルルールによる自動削除に依存し、投稿完了後の明示的な削除 API 呼び出しは行わないものとする (SHALL NOT)。
+
+#### Scenario: 動画を R2 へアップロードする（Upload video to R2）
+
+- **GIVEN** ユーザーが許容上限内の動画を添付して投稿を実行する
+- **WHEN** 投稿処理が動画のアップロード段階に到達する
+- **THEN** バックエンドが発行した署名付き URL へ動画が File/Blob のまま直接 PUT される
+- **AND** 動画の公開 URL が返され、各 SNS への投稿処理に使用される
+
+#### Scenario: 動画はライフサイクルルールで自動削除される（Video is deleted by lifecycle rule）
+
+- **GIVEN** 動画が `pppost/video/` プレフィックス配下にアップロードされた
+- **WHEN** バケットのライフサイクルルールで定められた期間が経過する
+- **THEN** 動画オブジェクトが自動削除される
+
+### Requirement: Bluesky への動画投稿（Post video to Bluesky）
+
+システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と自動生成の alt テキスト）を指定して投稿しなければならない (SHALL)。これらの動画エンドポイントは動画サービス（`video.bsky.app`）が提供するため、システムは PDS ではなく動画サービスに対してアップロード・状態確認を行い、アップロードには `com.atproto.server.getServiceAuth` で発行したサービス トークンを使用しなければならない (SHALL)。alt テキストは画像投稿と同様に自動生成（例: `Video`）しなければならない (SHALL)。
+
+動画のエンコード処理は数十秒かかることがあり、1 回の同期呼び出しの実行時間予算内に完了しないことがある。その場合、システムは投稿を失敗とせず、アップロード結果のジョブ ID を HTTP 202 でクライアントへ返さなければならない (SHALL)。クライアントは別エンドポイント（`bluesky_video_finalize`）をポーリングし、バックエンドが処理完了（blob の取得）を待ってから投稿しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
+
+#### Scenario: 動画を Bluesky に投稿する（同期完了）（Post video to Bluesky synchronously）
+
+- **GIVEN** ユーザーが Bluesky を投稿対象に選択し、本文と動画を入力している
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドが動画を動画サービス（`video.bsky.app`）へアップロードする
+- **AND** ジョブが実行時間予算内に完了し、`app.bsky.embed.video` を `embed` に指定して投稿が完了する
+
+#### Scenario: 動画処理が予算内に完了せず、ポーリング後に投稿される（Async finalize after polling）
+
+- **GIVEN** ユーザーが Bluesky を投稿対象に選択し、本文と動画を入力している
+- **AND** 動画のエンコード処理が 1 回の同期呼び出しの実行時間予算内に完了しない
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドはジョブ ID を HTTP 202 で返し、投稿は失敗として扱われない
+- **AND** クライアントが `bluesky_video_finalize` をポーリングし、処理完了後に `app.bsky.embed.video` を指定して投稿が完了する
+
+#### Scenario: 動画処理ジョブが失敗する（Video job fails）
+
+- **GIVEN** ユーザーが Bluesky を投稿対象に選択し、動画を添付している
+- **AND** 動画処理ジョブが `JOB_STATE_FAILED` になる状態である
+- **WHEN** 投稿ボタンを押下する
+- **THEN** 投稿は行われず、Bluesky 投稿が失敗として扱われる
+- **AND** エラー一覧に `Bluesky` が含まれ、ユーザーへ投稿失敗が通知される
+
+#### Scenario: 動画投稿時は画像や OGP を併用しない（Video posts do not include images or OGP）
+
+- **GIVEN** ユーザーが Bluesky を投稿対象に選択し、動画と本文を入力している
+- **WHEN** 投稿ボタンを押下する
+- **THEN** 本文中に URL が含まれていても OGP カードは埋め込まれない
+- **AND** 動画のみが `app.bsky.embed.video` として埋め込まれる
+
+### Requirement: Threads への動画投稿（Post video to Threads）
+
+システムは、Threads が投稿対象に選択され、動画が添付されているとき、バックエンドが R2 の動画公開 URL を `video_url` に指定した `media_type=VIDEO` のメディアコンテナを作成し、コンテナの処理完了（`FINISHED`）を待ってから公開しなければならない (SHALL)。
+
+動画コンテナの処理は Meta 側で数十秒かかることがあり、1 回の同期呼び出しの実行時間予算内に `FINISHED` にならないことがある。その場合、システムは投稿を失敗とせず、コンテナ作成結果として `creation_id` を HTTP 202 でクライアントへ返さなければならない (SHALL)。クライアントは別エンドポイント（`threads_video_finalize`）をポーリングし、バックエンドがコンテナの `FINISHED` を待って公開しなければならない (SHALL)。最終化（公開）の段階で `code:24 / subcode:4279009` "Media Not Found" の一時失敗が発生した場合は、画像投稿と同一のフロー（コンテナを作り直しての再試行・最大 3 回）に従わなければならない (SHALL)。コンテナの状態が `ERROR` または `EXPIRED` の場合、システムは公開せず、その投稿を失敗として扱い、エラー一覧に `Threads` を含めてユーザーへ通知しなければならない (SHALL)。動画が添付されている場合、システムは画像のカルーセルとして投稿してはならない (SHALL NOT)。ゴースト投稿（`is_ghost_post=true`）時は、画像と同様に添付動画を無視し、`media_type=TEXT` のコンテナを作成しなければならない (SHALL)。
+
+#### Scenario: 動画を Threads に投稿する（同期完了）（Post video to Threads synchronously）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択し、本文と動画を入力している
+- **WHEN** 投稿ボタンを押下する
+- **THEN** `media_type=VIDEO` のコンテナが `video_url`（R2 の動画公開 URL）付きで作成される
+- **AND** コンテナが実行時間予算内に `FINISHED` になり、同期のまま公開されて投稿が成功する
+
+#### Scenario: 動画コンテナの処理が予算内に完了せず、ポーリング後に公開される（Async finalize after polling）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択し、本文と動画を入力している
+- **AND** 動画コンテナの処理が 1 回の同期呼び出しの実行時間予算内に `FINISHED` にならない
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドは `creation_id` を HTTP 202 で返し、投稿は失敗として扱われない
+- **AND** クライアントが `threads_video_finalize` をポーリングし、コンテナが `FINISHED` になった後に公開されて投稿が成功する
+
+#### Scenario: 動画コンテナの公開が一時エラーで失敗し、再作成で成功する（Video publish retries after transient failure）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択し、動画を添付している
+- **AND** 公開（`threads_publish`）が `code:24 / subcode:4279009` "Media Not Found" で失敗する状態である
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドは実行時間予算が残る範囲でコンテナを作り直して再試行する
+- **AND** 再試行で公開が成功し、投稿が成功する
+
+### Requirement: Misskey への動画投稿（Post video to Misskey）
+
+システムは、Misskey が投稿対象に選択され、動画が添付されているとき、バックエンドが `drive/files/upload-from-url` で Misskey サーバーに動画 URL からの非同期取り込みを依頼し、取り込み完了後に `drive/files` から対象ファイルを特定して、そのファイル ID を `fileIds` に含めて `notes/create` でノートを作成しなければならない (SHALL)。動画の drive への直接アップロード（`drive/files/create`）は動画サムネイル生成（ffmpeg）などで 1 回の同期呼び出しの実行時間予算（30 秒）を超えることがあるため、システムは非同期最終化（`misskey_video_finalize`）の仕組みを用いなければならない (SHALL)。バックエンドは取り込み依頼の完了後に `video_url` を HTTP 202 でクライアントへ返し、クライアントは別エンドポイント（`misskey_video_finalize`）をポーリングして、取り込み完了後にノート作成を行わせなければならない (SHALL)。`drive/files` によるファイル検索は `read:drive` 権限を必要とするため、システムは Misskey 接続時に `read:drive` を含む権限を要求しなければならない (SHALL)。取り込み・ノート作成に失敗した場合、システムはその投稿を失敗として扱い、エラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
+
+#### Scenario: 動画を Misskey に投稿する（Post video to Misskey successfully）
+
+- **GIVEN** ユーザーが Misskey を投稿対象に選択し、本文と動画を入力している
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドが `drive/files/upload-from-url` で動画の非同期取り込みを依頼し、`video_url` を HTTP 202 で返す
+- **AND** 取り込み完了後に `misskey_video_finalize` が `drive/files` からファイルを特定し、`fileIds` でノートを作成して投稿が成功する
+
+#### Scenario: 動画の drive 取り込みが失敗する（Video upload to drive fails）
+
+- **GIVEN** ユーザーが Misskey を投稿対象に選択し、動画を添付している
+- **AND** 動画の取り込み・ノート作成が失敗する状態である（サーバーの容量制限・形式制限など）
+- **WHEN** 投稿ボタンを押下する
+- **THEN** ノートは作成されず、Misskey 投稿が失敗として扱われる
+- **AND** エラー一覧に `Misskey` が含まれ、ユーザーへ投稿失敗が通知される
+
+### Requirement: 共有シートからの動画共有（Share video via Web Share）
+
+システムは、動画が添付されている状態で共有ボタンが押されたとき、動画ファイルを `navigator.share({ files })` の `files` に含めて共有しなければならない (SHALL)。動画ファイルの共有が `navigator.canShare` でサポートされていない場合は、動画を含めずテキストのみを共有しなければならない (SHALL)。共有シートがキャンセルされた場合はエラーを表示してはならない (SHALL NOT)。
+
+#### Scenario: 動画を共有シートで共有する（Share video to other apps）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **AND** ブラウザが動画ファイルの共有をサポートしている
+- **WHEN** 共有ボタンを押下する
+- **THEN** 動画ファイルと本文が共有シートに含まれ、動画対応アプリ（X など）で動画付き投稿が可能になる
+
+#### Scenario: 動画共有が非対応環境でテキストのみにフォールバックする（Fall back to text-only share）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **AND** ブラウザが動画ファイルの共有をサポートしていない
+- **WHEN** 共有ボタンを押下する
+- **THEN** 動画は含まれず、テキストのみが共有シートで共有される
+
+### Requirement: 動画投稿時のリプライ・引用の禁止（Cannot reply or quote with video）
+
+システムは、動画が添付された投稿について、リプライ元または引用元を指定してはならない (SHALL NOT)。動画を添付している状態でリプライ元または引用元を選択できてはならず (SHALL NOT)、動画を添付した際にリプライ元・引用元の選択が解除されなければならない (SHALL)。バックエンドが動画とリプライ元・引用元の指定を同時に受信した場合、その投稿を 400 で拒否しなければならない (SHALL)。これは動画とリプライ・引用の併用が各 SNS の API 仕様で安定しないため、動画投稿は通常投稿のみに限定するものである。
+
+#### Scenario: 動画添付中はリプライ元を選択できない（Cannot select reply target with video）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **WHEN** リプライ元の選択を試みる
+- **THEN** リプライ元の選択は受け付けられない
+
+#### Scenario: 動画添付中は引用元を選択できない（Cannot select quote target with video）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **WHEN** 引用元の選択を試みる
+- **THEN** 引用元の選択は受け付けられない
+
+#### Scenario: 動画添付時にリプライ・引用の選択が解除される（Selection cleared when video is attached）
+
+- **GIVEN** ユーザーがリプライ元または引用元を選択済みである
+- **WHEN** 動画を添付する
+- **THEN** リプライ元・引用元の選択が解除される
+
+#### Scenario: バックエンドが動画とリプライ・引用を同時受信したら拒否する（Backend rejects video with reply or quote）
+
+- **GIVEN** バックエンドが動画とリプライ元（または引用元）の指定を含む投稿リクエストを受信する
+- **WHEN** 投稿処理が開始される
+- **THEN** 投稿は 400 で拒否され、いずれの SNS にも投稿されない
+
+### Requirement: 動画投稿失敗時のエラー通知（Video post failure notification）
+
+システムは、動画付き投稿の失敗を無言で握りつぶしてはならず (SHALL NOT)、失敗した SNS 名をエラー一覧へ追加してユーザーへ通知しなければならない (SHALL)。これはテキスト・画像投稿の既存のエラー通知と同一の仕組みに従うものとする (SHALL)。R2 への動画アップロード（署名付き URL 発行・PUT）が失敗した場合は、いずれの SNS にも到達していないため、各 SNS への投稿を試行してはならず (SHALL NOT)、投稿全体を中止して共通エラーとしてユーザーへ通知しなければならない (SHALL)。
+
+#### Scenario: 動画投稿の失敗を通知する（Notify user of video post failure）
+
+- **GIVEN** ユーザーが動画を添付して複数の SNS へ投稿を実行する
+- **AND** そのうち 1 つの SNS への動画投稿が失敗する状態である
+- **WHEN** 投稿処理が完了する
+- **THEN** 失敗した SNS 名がエラー一覧に追加され、ユーザーへ通知される
+- **AND** 成功した SNS の投稿は成功として通知される
+
+## Related Changes

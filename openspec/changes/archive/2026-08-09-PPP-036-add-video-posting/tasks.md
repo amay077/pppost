@@ -77,4 +77,4 @@
 ## 9. OpenSpec 検証とアーカイブ
 
 - [x] 9.1 `openspec validate PPP-036-add-video-posting --strict` が通る
-- [ ] 9.2 デプロイ後、archive 時に `openspec/specs/video-posting/spec.md` が新規作成され、`openspec/specs/sns-posting/spec.md` に併用禁止要件・`openspec/specs/web-share/spec.md` に無効化条件の変更が反映されていることを確認する
+- [x] 9.2 デプロイ後、archive 時に `openspec/specs/video-posting/spec.md` が新規作成され、`openspec/specs/sns-posting/spec.md` に併用禁止要件・`openspec/specs/web-share/spec.md` に無効化条件の変更が反映されていることを確認する
