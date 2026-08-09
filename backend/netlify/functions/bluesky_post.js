@@ -317,7 +317,7 @@ const handler = async (event) => {
                 `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(existingJobId)}`
               );
               const rawBody = await rawRes.json();
-              blob = rawBody?.blob ?? null;
+              blob = rawBody?.blob ?? rawBody?.jobStatus?.blob ?? null;
             } catch (rawError) {
               console.error(`Raw video job status check failed:`, rawError.message);
             }
@@ -371,8 +371,8 @@ const handler = async (event) => {
               `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(currentStatus.jobId)}`
             );
             const rawBody = await rawRes.json();
-            if (rawBody?.blob != null) {
-              blob = rawBody.blob;
+            if (rawBody?.blob != null || rawBody?.jobStatus?.blob != null) {
+              blob = rawBody.blob ?? rawBody.jobStatus.blob;
               break;
             }
           } catch (rawError) {

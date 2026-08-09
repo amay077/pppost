@@ -89,8 +89,8 @@ const handler = async (event) => {
             `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(job_id)}`
           );
           const rawBody = await rawRes.json();
-          if (rawBody?.blob != null) {
-            blob = rawBody.blob;
+          if (rawBody?.blob != null || rawBody?.jobStatus?.blob != null) {
+            blob = rawBody.blob ?? rawBody.jobStatus.blob;
             break;
           }
         } catch (rawError) {
