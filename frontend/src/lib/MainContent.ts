@@ -311,11 +311,58 @@ const postToMisskey = async (text: string, imageUrls: string[], videoUrl: string
       }),
     });
 
+    // 202 Accepted も res.ok が true になるため、ステータス判定は 202 を先に確認する
+    // 動画は drive/files/upload-from-url で非同期に取り込まれるため、202 + video_url が返る。
+    // 取り込み完了 → ノート作成を misskey_video_finalize へのポーリングで行う。
+    if (res.status === 202) {
+      const { video_url } = await res.json();
+      return await finalizeMisskeyVideo(text, video_url);
+    }
+
     return res.ok;
   } catch (error) {
     console.error(`postToMisskey -> error:`, error);
     return false;
   }
+};
+
+// misskey_post が 202（動画の drive 取り込み中）を返した場合の最終化ポーリング。
+// 取り込み完了後に misskey_video_finalize がノートを作成し、200 が返ったら true。
+const finalizeMisskeyVideo = async (text: string, video_url: string): Promise<boolean> => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const FINALIZE_POLL_MAX_ATTEMPTS = 20; // 3 秒間隔で最大 60 秒待つ
+  const FINALIZE_POLL_INTERVAL_MS = 3000;
+
+  for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {
+    await sleep(FINALIZE_POLL_INTERVAL_MS);
+    try {
+      const res = await fetch(`${Config.API_ENDPOINT}/misskey_video_finalize`, {
+        method: 'POST',
+        headers: buildAuthHeaders('application/json'),
+        body: JSON.stringify({
+          text,
+          video_url,
+        }),
+      });
+
+      // 202 Accepted も res.ok が true になるため、ステータス判定は 202 を先に確認する
+      if (res.status === 202) {
+        // まだ取り込み・処理中: 再ポーリング
+        continue;
+      }
+      if (res.ok) {
+        return true;
+      }
+      console.error(`misskey_video_finalize failed: ${res.status}`, await res.text());
+      return false;
+    } catch (error) {
+      console.error(`finalizeMisskeyVideo -> error:`, error);
+      return false;
+    }
+  }
+
+  console.error('misskey video finalize timed out');
+  return false;
 };
 
 const loadMyPostsMisskey = async (): Promise<Post[]> => {

@@ -78,34 +78,65 @@ const handler = async (event) => {
       };
     }
 
-    // 画像・動画アップロード処理（misskey.io の上限は 500 MB のためリサイズは行わない）
-    // 1 ファイルあたり 10 秒近くかかるため、直列だと複数ファイルで Netlify Function の
-    // 実行時間上限（30 秒）を超える。並列化してファイル数に比例しないようにする。
+    // 動画: drive/files/upload-from-url で Misskey 側が非同期に取り込む。
+    // 直接の drive/files/create は動画サムネイル生成（ffmpeg）などで 30 秒を超えることがあり、
+    // Netlify 同期 Function の実行時間制限に収まらないため、非同期最終化（misskey_video_finalize）に委ねる。
+    // force: true で同一ハッシュの重複を許容し、URL 由来の一意なファイル名（R2 のオブジェクト名）を drive に保持させる。
+    if (hasVideo) {
+      const uploadRes = await fetch(`${origin}/api/drive/files/upload-from-url`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: video,
+          force: true,
+        }),
+      });
+
+      if (!uploadRes.ok) {
+        console.error(`Failed to request drive upload from url:`, uploadRes.status, await uploadRes.text());
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'Failed to request video upload to Misskey' })
+        };
+      }
+
+      const response = {
+        statusCode: 202,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'processing', video_url: video }),
+      };
+      console.info('misskey video upload requested, waiting for finalize', response.body);
+      return response;
+    }
+
+    // 画像アップロード処理（misskey.io の上限は 500 MB のためリサイズは行わない）
+    // 1 枚あたり 10 秒近くかかるため、直列だと 3 枚で Netlify Function の
+    // 実行時間上限（30 秒）を超える。並列化して枚数に比例しないようにする。
     const fileIds = [];
 
-    if (hasImages || hasVideo) {
+    if (hasImages) {
       const startedAt = Date.now();
 
-      // 画像と動画の混在はバリデーションで拒否済みのため、対象はどちらか一方のみ
-      const mediaUrls = hasVideo ? [video] : images;
-
-      const results = await Promise.all(mediaUrls.map(async (mediaUrl) => {
+      const results = await Promise.all(images.map(async (imageUrl) => {
         try {
-          // ストレージ (R2) の公開URLからメディアを取得
-          const mediaRes = await fetch(mediaUrl);
-          if (!mediaRes.ok) {
-            console.error(`Failed to fetch media from ${mediaUrl}`);
-            return { ok: false, statusCode: 400, error: 'Failed to fetch media' };
+          // ストレージ (R2) の公開URLから画像を取得
+          const imageRes = await fetch(imageUrl);
+          if (!imageRes.ok) {
+            console.error(`Failed to fetch image from ${imageUrl}`);
+            return { ok: false, statusCode: 400, error: 'Failed to fetch image' };
           }
 
-          const mediaBuffer = await mediaRes.buffer();
-          const contentType = mediaRes.headers.get('content-type') || (hasVideo ? 'video/mp4' : 'image/png');
-          const ext = contentType.split('/')[1] || (hasVideo ? 'mp4' : 'png');
-          const prefix = hasVideo ? 'video' : 'image';
+          const imageBuffer = await imageRes.buffer();
+          const contentType = imageRes.headers.get('content-type') || 'image/png';
+          const ext = contentType.split('/')[1] || 'png';
 
           const formData = new FormData();
-          formData.append('file', mediaBuffer, {
-            filename: `${prefix}.${ext}`,
+          formData.append('file', imageBuffer, {
+            filename: `image.${ext}`,
             contentType,
           });
 
@@ -119,21 +150,21 @@ const handler = async (event) => {
           });
 
           if (!uploadRes.ok) {
-            console.error(`Failed to upload media to Misskey:`, uploadRes.status, await uploadRes.text());
-            return { ok: false, statusCode: 400, error: 'Failed to upload media to Misskey' };
+            console.error(`Failed to upload image to Misskey:`, uploadRes.status, await uploadRes.text());
+            return { ok: false, statusCode: 400, error: 'Failed to upload image to Misskey' };
           }
 
           const uploadData = await uploadRes.json();
           return { ok: true, id: uploadData.id };
         } catch (error) {
-          console.error(`Error processing media:`, error);
-          return { ok: false, statusCode: 500, error: 'Media processing error' };
+          console.error(`Error processing image:`, error);
+          return { ok: false, statusCode: 500, error: 'Image processing error' };
         }
       }));
 
-      console.info(`misskey drive upload: ${mediaUrls.length} file(s) in ${Date.now() - startedAt} ms`);
+      console.info(`misskey drive upload: ${images.length} image(s) in ${Date.now() - startedAt} ms`);
 
-      // 1 ファイルでも失敗したらノートは作成しない
+      // 1 枚でも失敗したらノートは作成しない
       const failed = results.find(r => !r.ok);
       if (failed != null) {
         return {

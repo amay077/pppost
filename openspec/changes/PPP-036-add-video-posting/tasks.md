@@ -58,8 +58,11 @@
 
 ## 7. Misskey の動画投稿（バックエンド）
 
-- [x] 7.1 `misskey_post.js` の drive アップロード処理を動画ファイル（`video/*`）にも対応させる
-- [x] 7.2 動画のアップロード失敗時はノートを作成せず失敗を返すことを確認する
+- [x] 7.1 動画投稿を `drive/files/upload-from-url`（非同期取り込み）に変更し、取り込み依頼後は `video_url` を HTTP 202 で返す（`drive/files/create` の直接アップロードは 30 秒タイムアウトのため）
+- [x] 7.2 `misskey_video_finalize` 関数を追加し、`drive/files`（`type: 'video/*'`・作成日時降順）から URL 由来のファイル名で対象を特定して `notes/create` でノートを作成する
+- [x] 7.3 取り込み完了前は 202 を返し、クライアントがポーリングする（`drive/files/upload-from-url` は同一ハッシュの既存ファイルを再利用するため `force: true` で新規登録させる）
+- [x] 7.4 動画の取り込み・ノート作成失敗時はノートを作成せず失敗を返すことを確認する
+- [x] 7.5 フロントが 202 受信時に `misskey_video_finalize` をポーリングし、完了後に成功とする
 
 ## 8. 動作検証
 

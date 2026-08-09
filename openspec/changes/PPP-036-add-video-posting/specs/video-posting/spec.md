@@ -139,19 +139,19 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Misskey への動画投稿（Post video to Misskey）
 
-システムは、Misskey が投稿対象に選択され、動画が添付されているとき、バックエンドが R2 の動画公開 URL から動画を取得し、`drive/files/create` で drive へアップロードしたうえで、そのファイル ID を `fileIds` に含めて `notes/create` でノートを作成しなければならない (SHALL)。動画のアップロードに失敗した場合、システムはノートを作成せず、その投稿を失敗として扱い、エラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
+システムは、Misskey が投稿対象に選択され、動画が添付されているとき、バックエンドが `drive/files/upload-from-url` で Misskey サーバーに動画 URL からの非同期取り込みを依頼し、取り込み完了後に `drive/files` から対象ファイルを特定して、そのファイル ID を `fileIds` に含めて `notes/create` でノートを作成しなければならない (SHALL)。動画は `drive/files/create` での直接アップロードでは動画サムネイル生成（ffmpeg）などで 1 回の同期呼び出しの実行時間予算を超えることがあるため、システムは非同期最終化（`misskey_video_finalize`）の仕組みを用いなければならない (SHALL)。バックエンドは取り込み依頼の完了後に `video_url` を HTTP 202 でクライアントへ返し、クライアントは別エンドポイント（`misskey_video_finalize`）をポーリングして、取り込み完了後にノート作成を行わせなければならない (SHALL)。取り込み・ノート作成に失敗した場合、システムはその投稿を失敗として扱い、エラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
 
 #### Scenario: 動画を Misskey に投稿する（Post video to Misskey successfully）
 
 - **GIVEN** ユーザーが Misskey を投稿対象に選択し、本文と動画を入力している
 - **WHEN** 投稿ボタンを押下する
-- **THEN** 動画が `drive/files/create` で drive へアップロードされる
-- **AND** アップロードされたファイル ID を含む `fileIds` でノートが作成され、投稿が成功する
+- **THEN** バックエンドが `drive/files/upload-from-url` で動画の非同期取り込みを依頼する
+- **AND** 取り込み完了後に `misskey_video_finalize` が drive からファイルを特定し、`fileIds` でノートを作成して投稿が成功する
 
-#### Scenario: 動画の drive アップロードが失敗する（Video upload to drive fails）
+#### Scenario: 動画の drive 取り込みが失敗する（Video upload to drive fails）
 
 - **GIVEN** ユーザーが Misskey を投稿対象に選択し、動画を添付している
-- **AND** 動画の `drive/files/create` が失敗する状態である（サーバーの容量制限・形式制限など）
+- **AND** 動画の取り込み・ノート作成が失敗する状態である（サーバーの容量制限・形式制限など）
 - **WHEN** 投稿ボタンを押下する
 - **THEN** ノートは作成されず、Misskey 投稿が失敗として扱われる
 - **AND** エラー一覧に `Misskey` が含まれ、ユーザーへ投稿失敗が通知される
