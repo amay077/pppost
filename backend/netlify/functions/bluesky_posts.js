@@ -53,7 +53,7 @@ const handler = async (event) => {
     console.log('Session resumed, DID:', did);
 
     // トークンリフレッシュ
-    await agent.refreshSession();
+    await agent.sessionManager.refreshSession();
 
     // 更新されたセッションデータを D1 に書き戻す（クライアントへは返さない）
     await saveToken(sessionId, 'bluesky', agent.session, {

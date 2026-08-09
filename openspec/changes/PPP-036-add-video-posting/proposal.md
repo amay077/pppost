@@ -12,25 +12,27 @@
 
 ## What Changes
 
-- **フロントエンド**: 動画の選択 UI（`accept="video/*"`）と `<video>` プレビューを追加する。動画を添付した場合は画像を添付できなくする（画像と動画の併用は不可）。許容上限（100MB・5 分以内）をフロントで事前チェックする。動画は base64 化せず File/Blob のまま R2 の署名付き URL へ直接 PUT する
+- **フロントエンド**: 動画の選択 UI（`accept="video/*"`）と `<video>` プレビューを追加する。動画を添付した場合は画像を添付できなくする（画像と動画の併用は不可）。許容上限（100MB・3 分以内）をフロントで事前チェックする。動画は base64 化せず File/Blob のまま R2 の署名付き URL へ直接 PUT する
 - **R2**: `r2_presigned_url` の Content-Type 解決を拡張子から一般化し、動画（`video/mp4` 等）に対応させる。動画は `pppost/video/` プレフィックスのオブジェクトとして保存し、削除は画像と同様にバケットのライフサイクルルールに依存する
 - **Threads**: 動画 1 本を `media_type=VIDEO` + `video_url`（R2 公開 URL）で投稿する。既存のコンテナ FINISHED 待ち・公開リトライ（4279009）のフローを流用する
 - **Bluesky**: `@atproto/api` を動画 lexicon 対応版へアップグレードし、`app.bsky.video.uploadVideo` → `getJobStatus` ポーリング → `app.bsky.embed.video` の順で投稿する
 - **Misskey**: 既存の `drive/files/create` アップロード処理を拡張し、動画ファイルを drive へアップロードして `fileIds` に含める
-- **共有（Web Share）**: 共有シートから動画付きで共有できるようにする（`canShare` チェック・非対応環境ではテキストのみへフォールバック）
-- 動画投稿の失敗時は、画像投稿と同様にエラー一覧へ SNS 名を追加してユーザーへ通知する
+- **共有（Web Share）**: 共有シートから動画付きで共有できるようにする（`canShare` チェック・非対応環境ではテキストのみへフォールバック）。共有ボタンの無効化条件に動画を加える
+- **リプライ・引用との排他**: 動画を添付した投稿ではリプライ元・引用元の指定を禁止し、動画添付時に選択を解除する
+- 動画投稿の失敗時は、画像投稿と同様にエラー一覧へ SNS 名を追加してユーザーへ通知する。R2 へのアップロード失敗時は全 SNS への投稿を試行せず、共通エラーとして通知する
 
 ## Non-Goals
 
 - 画像と動画の混在投稿（動画を添付した場合は動画のみ）
+- 動画とリプライ・引用の併用（動画投稿は通常投稿のみに限定）
+- 本文なしの動画のみ投稿（投稿ボタンは本文必須のまま。共有ボタンは動画のみでも有効とする）
 - 動画のトランスコード・リサイズ・サムネイル生成（ユーザーが用意したファイルをそのまま投稿する）
 - Threads カルーセルへの動画混在（カルーセルは画像のみの現行仕様を維持）
-- Bluesky の再生時間制限が 3 分の場合の自動変換（実装時に公式情報で確認し、必要なら Bluesky のみの別制限を検討）
 - 自投稿一覧（リプライ元選択）での動画の表示・再生
 
 ## Impact
 
-- **Affected specs**: `video-posting`（新規）、`sns-posting`（動画と画像の併用禁止を追加）
+- **Affected specs**: `video-posting`（新規）、`sns-posting`（動画と画像の併用禁止を追加）、`web-share`（共有ボタン無効化条件に動画を追加）
 - **Affected code**:
   - `frontend/src/lib/MainContent.ts` / `MainContent.svelte` / `ImagePreview.svelte`（動画選択・プレビュー・投稿フロー）
   - `frontend/src/lib/storage-client.ts`（Blob 直接 PUT）

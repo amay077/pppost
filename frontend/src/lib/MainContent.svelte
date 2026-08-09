@@ -27,6 +27,91 @@ let text = loadMessage()?.message ?? '';
 // let imageDataURLs: string[] = []; // 古い形式は削除
 let images: ImageData[] = []; // 新しいデータ構造の配列
 
+// 動画添付（画像と排他・最大 1 本）
+let videoFile: File | null = null;
+let videoPreviewUrl: string | null = null;
+let videoError: string | null = null;
+let videoInput: HTMLInputElement;
+
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_VIDEO_DURATION_SEC = 180; // 3 分（投稿対象 SNS のうち最も厳しい Bluesky の制限に合わせる）
+
+// 動画の File とプレビュー URL をまとめて設定/解除する
+const setVideoFile = (file: File | null) => {
+  if (videoPreviewUrl != null) {
+    URL.revokeObjectURL(videoPreviewUrl);
+  }
+  videoFile = file;
+  videoPreviewUrl = file != null ? URL.createObjectURL(file) : null;
+};
+
+// 動画の上限（サイズ・再生時間）を選択時に検証する
+const validateVideo = (file: File): Promise<string | null> => {
+  return new Promise((resolve) => {
+    if (file.size > MAX_VIDEO_SIZE) {
+      resolve('動画は 100MB 以内にしてください');
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      // 再生時間が取得できない（NaN・Infinity）場合は読み込み失敗として拒否する
+      if (!Number.isFinite(video.duration)) {
+        resolve('動画を読み込めません。別のファイルを選択してください');
+        return;
+      }
+      if (video.duration > MAX_VIDEO_DURATION_SEC) {
+        resolve('動画は 3 分以内にしてください');
+      } else {
+        resolve(null);
+      }
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve('動画を読み込めません。別のファイルを選択してください');
+    };
+    video.src = url;
+  });
+};
+
+// 動画選択時: 上限チェック後、画像・リプライ元・引用元との排他制御を行う
+const onSelectVideo = async (evt: Event) => {
+  const target = evt.target as HTMLInputElement;
+  const files = target.files ?? [];
+  if (files.length === 0) return;
+
+  const file = files[0];
+  videoError = null;
+
+  if (file.type.length > 0 && !file.type.startsWith('video/')) {
+    videoError = '動画ファイルを選択してください';
+    target.value = '';
+    return;
+  }
+
+  const error = await validateVideo(file);
+  if (error != null) {
+    videoError = error;
+    target.value = '';
+    return;
+  }
+
+  // 動画と画像は排他: 動画を添付したら画像・リプライ元・引用元を解除する
+  images = [];
+  replyToPost = emptyPresentedPost();
+  quoteToPost = emptyPresentedPost();
+  setVideoFile(file);
+  target.value = '';
+};
+
+// 画像が追加されたら動画を解除する（動画と画像の排他）
+$: if (images.length > 0 && videoFile != null) {
+  setVideoFile(null);
+}
+
 let expandedReply = false;
 let replyToPost: PresentedPost = {
   display_posted_at: undefined,
@@ -371,6 +456,8 @@ const onTextChange = () => {
 const clearPostContent = () => {
   text = '';
   images = [];
+  setVideoFile(null);
+  videoError = null;
   replyToPost = emptyPresentedPost();
   quoteToPost = emptyPresentedPost();
   posted = false;
@@ -399,6 +486,10 @@ const shareContent = async () => {
       const blob = await res.blob();
       const ext = blob.type.split('/')[1] ?? 'png';
       files.push(new File([blob], `image_${i + 1}.${ext}`, { type: blob.type }));
+    }
+    // 動画が添付されている場合は動画を共有対象に含める（画像とは排他のため併用はない）
+    if (videoFile != null) {
+      files.push(videoFile);
     }
 
     const shareData: ShareData = { text };
@@ -474,7 +565,7 @@ const post = async () => {
         threads: quoteToPost?.postOfType['threads']?.id ?? '',
         misskey: getPostId(quoteToPost?.postOfType['misskey']?.url),
       },
-    });
+    }, videoFile);
 
     if (res.errors.length == 0) {
       replyToPost = emptyPresentedPost();
@@ -618,7 +709,7 @@ const getTypes = (post: PresentedPost) => {
 
   </button>
 
-  <button class="btn btn-primary-outline" on:click={clearPostContent} disabled={text.length <= 0 && images.length <= 0}>
+  <button class="btn btn-primary-outline" on:click={clearPostContent} disabled={text.length <= 0 && images.length <= 0 && videoFile == null}>
     Clear
     </button>
 
@@ -649,7 +740,7 @@ const getTypes = (post: PresentedPost) => {
     <button
       class="btn btn-outline-primary d-flex align-items-center"
       on:click={() => shareContent()}
-      disabled={text.length <= 0 && images.length <= 0}
+      disabled={text.length <= 0 && images.length <= 0 && videoFile == null}
       aria-label="共有"
       title="共有"
     >
@@ -697,7 +788,7 @@ const getTypes = (post: PresentedPost) => {
 
   {#if expandedReply}
 
-  <select class="form-select form-select-sm" bind:value={replyToPost} on:change={onChangeReplyTarget}>
+  <select class="form-select form-select-sm" bind:value={replyToPost} on:change={onChangeReplyTarget} disabled={videoFile != null}>
     <option>（選択しない）</option>
     {#each myPosts as post}
     <option value={post}>{post.display_posted_at} - {post.trimmed_text} {getTypes(post)}</option>
@@ -741,7 +832,7 @@ const getTypes = (post: PresentedPost) => {
 
   {#if expandedQuote}
 
-  <select class="form-select form-select-sm" bind:value={quoteToPost} on:change={onChangeQuoteTarget}>
+  <select class="form-select form-select-sm" bind:value={quoteToPost} on:change={onChangeQuoteTarget} disabled={videoFile != null}>
     <option>（選択しない）</option>
     {#each myPosts as post}
     <option value={post}>{post.display_posted_at} - {post.trimmed_text} {getTypes(post)}</option>
@@ -755,7 +846,40 @@ const getTypes = (post: PresentedPost) => {
 <div class="mt-4">
   <ImagePreview
     bind:images={images}
+    disabled={videoFile != null}
   />
+
+  {#if videoFile != null}
+  <div class="d-flex flex-row gap-2 align-items-center mt-2">
+    <!-- svelte-ignore a11y-media-has-caption -->
+    <video
+      src={videoPreviewUrl ?? ''}
+      controls
+      style="height: 100px; width: auto; max-width: 100%; display: block; background: #000;" />
+    <!-- 削除ボタン -->
+    <button
+      class="btn btn-danger btn-sm"
+      aria-label="動画を削除"
+      on:click={() => setVideoFile(null)}
+    >
+      &times;
+    </button>
+  </div>
+  {:else}
+  <div class="mt-2">
+    <input bind:this={videoInput} type="file" style="display: none" accept="video/mp4" on:change={onSelectVideo} />
+    <button class="btn btn-sm btn-block btn-primary"
+      on:click={() => {
+        videoInput.click()
+      }}
+    >
+      <i class="fa fa-plus" aria-hidden="true"></i>&nbsp;動画を追加
+    </button>
+    {#if videoError != null}
+    <div class="text-danger mt-1" style="font-size: 90%;">{videoError}</div>
+    {/if}
+  </div>
+  {/if}
 
 </div>
 

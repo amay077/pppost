@@ -1,7 +1,7 @@
 import { Config } from "../config";
 import { type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
 import dayjs from "dayjs";
-import { uploadImageToStorage } from "./storage-client";
+import { uploadBlobToStorage, uploadImageToStorage } from "./storage-client";
 
 // トークンを要する API 呼び出しに付与する共通ヘッダを組み立てる。
 // トークンはサーバー保管のため、クライアントは Bearer セッション ID のみを送る。
@@ -223,7 +223,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
     threads: string,
     misskey: string,
   },
-}): Promise<{ errors: string[] }> => {
+}, video: File | null = null): Promise<{ errors: string[] }> => {
   const errors: string[] = [];
 
   // 画像を一度だけストレージ (R2) にアップロード
@@ -245,6 +245,19 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
     }
   }
 
+  // 動画を一度だけストレージ (R2) にアップロード（動画は画像と排他のため、ここではどちらか一方のみ）
+  // アップロードに失敗した場合は全 SNS への投稿を中止する
+  let uploadedVideoUrl: string | null = null;
+  if (video != null) {
+    const ext = video.name.split('.').pop()?.toLowerCase() || 'mp4';
+    const videoUrl = await uploadBlobToStorage(video, `video_1.${ext}`);
+    if (videoUrl == null) {
+      console.error('Failed to upload video');
+      return { errors: ['動画のアップロードに失敗しました'] };
+    }
+    uploadedVideoUrl = videoUrl;
+  }
+
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
 
   const promises = [];
@@ -252,13 +265,13 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   for (const type of enableTypes) {
     switch (type) {
     case 'bluesky':
-      promises.push(postToBluesky(text, uploadedImageUrls, options?.reply_to_ids?.bluesky, options?.quote_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
+      promises.push(postToBluesky(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.bluesky, options?.quote_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
       break;
     case 'threads':
-      promises.push(postToThreads(text, uploadedImageUrls, options?.reply_to_ids?.threads, options?.quote_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
+      promises.push(postToThreads(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.threads, options?.quote_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
       break;
     case 'misskey':
-      promises.push(postToMisskey(text, uploadedImageUrls, options?.reply_to_ids?.misskey, options?.quote_to_ids?.misskey).then((r) => { if (!r) errors.push('Misskey') }));
+      promises.push(postToMisskey(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.misskey, options?.quote_to_ids?.misskey).then((r) => { if (!r) errors.push('Misskey') }));
       break;
     }
 
@@ -283,7 +296,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 };
 
 
-const postToMisskey = async (text: string, imageUrls: string[], reply_to_id: string, quote_to_id: string): Promise<boolean> => {
+const postToMisskey = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<boolean> => {
   try {
     // host / token はサーバーがセッションから復号して使用するため、クライアントは送らない
     const res = await fetch(`${Config.API_ENDPOINT}/misskey_post`, {
@@ -292,6 +305,7 @@ const postToMisskey = async (text: string, imageUrls: string[], reply_to_id: str
       body: JSON.stringify({
         text,
         images: imageUrls,
+        video: videoUrl,
         reply_to_id,
         quote_to_id
       }),
@@ -325,7 +339,7 @@ const loadMyPostsMisskey = async (): Promise<Post[]> => {
 };
 
 
-const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: string, quote_to_id?: string): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id?: string, quote_to_id?: string): Promise<boolean> => {
   try {
     // トークンはサーバーがセッションから復号して使用する
     const res = await fetch(`${Config.API_ENDPOINT}/threads_post`, {
@@ -334,6 +348,7 @@ const postToThreads = async (text: string, imageUrls: string[], reply_to_id?: st
       body: JSON.stringify({
         text,
         images: imageUrls,
+        video: videoUrl,
         reply_to_id,
         quote_to_id,
       }),
@@ -387,7 +402,7 @@ const loadMyPostsBluesky = async (): Promise<Post[]> => {
   }
 };
 
-const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: string, quote_to_id: string): Promise<boolean> => {
+const postToBluesky = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<boolean> => {
   try {
     // session データはサーバーがセッションから復号して使用する
     const res = await fetch(`${Config.API_ENDPOINT}/bluesky_post`, {
@@ -396,6 +411,7 @@ const postToBluesky = async (text: string, imageUrls: string[], reply_to_id: str
       body: JSON.stringify({
         text,
         images: imageUrls,
+        video: videoUrl,
         reply_to_id,
         quote_to_id
       }),

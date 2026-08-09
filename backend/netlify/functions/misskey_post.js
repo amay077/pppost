@@ -47,12 +47,30 @@ const handler = async (event) => {
     const origin = buildMisskeyOrigin(host);
     const token = stored.token.access_token;
 
-    const { text, images, reply_to_id, quote_to_id } = JSON.parse(event.body);
+    const { text, images, video, reply_to_id, quote_to_id } = JSON.parse(event.body);
 
     const hasImages = Array.isArray(images) && images.length > 0;
+    const hasVideo = typeof video === 'string' && video.length > 0;
+
+    // 動画と画像の併用は不可（フロントでも排他制御するが、サーバー側でも拒否する）
+    if (hasVideo && hasImages) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'cannot post video with images' })
+      };
+    }
+    // 動画とリプライ・引用の併用は不可
+    if (hasVideo && ((reply_to_id?.length ?? 0) > 0 || (quote_to_id?.length ?? 0) > 0)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'cannot post video with reply or quote' })
+      };
+    }
 
     // Misskey は本文と添付ファイルの双方が空のノートを受け付けない
-    if ((text?.length ?? 0) <= 0 && !hasImages) {
+    if ((text?.length ?? 0) <= 0 && !hasImages && !hasVideo) {
       return {
         statusCode: 400,
         headers,
@@ -60,30 +78,34 @@ const handler = async (event) => {
       };
     }
 
-    // 画像アップロード処理（misskey.io の上限は 500 MB のためリサイズは行わない）
-    // 1 枚あたり 10 秒近くかかるため、直列だと 3 枚で Netlify Function の
-    // 実行時間上限（30 秒）を超える。並列化して枚数に比例しないようにする。
+    // 画像・動画アップロード処理（misskey.io の上限は 500 MB のためリサイズは行わない）
+    // 1 ファイルあたり 10 秒近くかかるため、直列だと複数ファイルで Netlify Function の
+    // 実行時間上限（30 秒）を超える。並列化してファイル数に比例しないようにする。
     const fileIds = [];
 
-    if (hasImages) {
+    if (hasImages || hasVideo) {
       const startedAt = Date.now();
 
-      const results = await Promise.all(images.map(async (imageUrl) => {
+      // 画像と動画の混在はバリデーションで拒否済みのため、対象はどちらか一方のみ
+      const mediaUrls = hasVideo ? [video] : images;
+
+      const results = await Promise.all(mediaUrls.map(async (mediaUrl) => {
         try {
-          // ストレージ (R2) の公開URLから画像を取得
-          const imageRes = await fetch(imageUrl);
-          if (!imageRes.ok) {
-            console.error(`Failed to fetch image from ${imageUrl}`);
-            return { ok: false, statusCode: 400, error: 'Failed to fetch image' };
+          // ストレージ (R2) の公開URLからメディアを取得
+          const mediaRes = await fetch(mediaUrl);
+          if (!mediaRes.ok) {
+            console.error(`Failed to fetch media from ${mediaUrl}`);
+            return { ok: false, statusCode: 400, error: 'Failed to fetch media' };
           }
 
-          const imageBuffer = await imageRes.buffer();
-          const contentType = imageRes.headers.get('content-type') || 'image/png';
-          const ext = contentType.split('/')[1] || 'png';
+          const mediaBuffer = await mediaRes.buffer();
+          const contentType = mediaRes.headers.get('content-type') || (hasVideo ? 'video/mp4' : 'image/png');
+          const ext = contentType.split('/')[1] || (hasVideo ? 'mp4' : 'png');
+          const prefix = hasVideo ? 'video' : 'image';
 
           const formData = new FormData();
-          formData.append('file', imageBuffer, {
-            filename: `image.${ext}`,
+          formData.append('file', mediaBuffer, {
+            filename: `${prefix}.${ext}`,
             contentType,
           });
 
@@ -97,21 +119,21 @@ const handler = async (event) => {
           });
 
           if (!uploadRes.ok) {
-            console.error(`Failed to upload image to Misskey:`, uploadRes.status, await uploadRes.text());
-            return { ok: false, statusCode: 400, error: 'Failed to upload image to Misskey' };
+            console.error(`Failed to upload media to Misskey:`, uploadRes.status, await uploadRes.text());
+            return { ok: false, statusCode: 400, error: 'Failed to upload media to Misskey' };
           }
 
           const uploadData = await uploadRes.json();
           return { ok: true, id: uploadData.id };
         } catch (error) {
-          console.error(`Error processing image:`, error);
-          return { ok: false, statusCode: 500, error: 'Image processing error' };
+          console.error(`Error processing media:`, error);
+          return { ok: false, statusCode: 500, error: 'Media processing error' };
         }
       }));
 
-      console.info(`misskey drive upload: ${images.length} image(s) in ${Date.now() - startedAt} ms`);
+      console.info(`misskey drive upload: ${mediaUrls.length} file(s) in ${Date.now() - startedAt} ms`);
 
-      // 1 枚でも失敗したらノートは作成しない
+      // 1 ファイルでも失敗したらノートは作成しない
       const failed = results.find(r => !r.ok);
       if (failed != null) {
         return {

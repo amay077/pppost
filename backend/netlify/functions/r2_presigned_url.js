@@ -32,12 +32,41 @@ const handler = async (event) => {
     // ユニークなファイル名を生成
     const timestamp = Date.now();
     const randomStr = crypto.randomBytes(8).toString('hex');
-    const extension = filename.split('.').pop() || 'png';
-    const fileName = `${timestamp}-${randomStr}.${extension}`;
-    const filePath = `pppost/${fileName}`;
+    const ext = (filename.split('.').pop() || 'png').toLowerCase();
+    const fileName = `${timestamp}-${randomStr}.${ext}`;
 
-    // PUT 時の Content-Type と署名を一致させるため、ここで決定して返す
-    const contentType = `image/${extension}`;
+    // 拡張子から Content-Type を解決する（画像・動画の両方に対応）
+    // 署名付き PUT 時の Content-Type と一致させる必要があるため、ここで決定して返す
+    const MIME_BY_EXT = {
+      // 画像
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      // 動画
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      webm: 'video/webm',
+      m4v: 'video/x-m4v',
+    };
+    const contentType = MIME_BY_EXT[ext];
+    if (contentType == null) {
+      // 未知の拡張子はライフサイクルルールの対象（pppost/ と pppost/video/）を
+      // 判別できないため、アップロードを受け付けない
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ error: `unsupported file extension: ${ext}` }),
+      };
+    }
+
+    // 動画はライフサイクルルールを分けて管理するため、プレフィックスを分ける
+    const isVideo = contentType.startsWith('video/');
+    const filePath = isVideo ? `pppost/video/${fileName}` : `pppost/${fileName}`;
 
     // 署名付きアップロードURLを生成（5分間有効）
     const command = new PutObjectCommand({

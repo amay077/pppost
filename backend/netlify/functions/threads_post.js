@@ -129,9 +129,10 @@ const publishContainer = async (creation_id, token) => {
 
 // Threads へ 1 件投稿する。成功時 { ok: true }、失敗時 { ok: false, statusCode, error }。
 // 公開が一時的失敗（code:24 / subcode:4279009）で失敗した場合のみ retryable: true を返す。
-// isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
+// isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像・動画は無視する。
+// videoUrl が指定された場合は media_type=VIDEO の単一動画コンテナを作成する（画像は併用不可）。
 // deadline は絶対時刻（ミリ秒）で、この投稿に使える実行時間の上限を表す。
-const doThreadsPostOnce = async ({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline }) => {
+const doThreadsPostOnce = async ({ token, text, imageUrls, videoUrl, reply_to_id, quote_to_id, isGhost, deadline }) => {
   // リプライ投稿時のみトップレベルコンテナに付与する追加パラメータ
   const replyParams = (reply_to_id != null && reply_to_id !== '')
     ? { reply_to_id }
@@ -152,6 +153,19 @@ const doThreadsPostOnce = async ({ token, text, imageUrls, reply_to_id, quote_to
     }, 'ghost');
     if (creation_id == null) {
       return { ok: false, statusCode: 500, error: 'failed to create threads ghost container' };
+    }
+  } else if (videoUrl != null) {
+    // 動画投稿（media_type=VIDEO）。video_url は公開 URL（R2 の公開 URL をそのまま渡す）
+    creation_id = await createContainer({
+      media_type: 'VIDEO',
+      video_url: videoUrl,
+      text,
+      access_token: token,
+      ...replyParams,
+      ...quoteParams,
+    }, 'video');
+    if (creation_id == null) {
+      return { ok: false, statusCode: 500, error: 'failed to create threads video container' };
     }
   } else {
     // 上限超過: Threads API を呼ばずにエラーを返す
@@ -255,9 +269,9 @@ const doThreadsPostOnce = async ({ token, text, imageUrls, reply_to_id, quote_to
 // 公開が code:24 / subcode:4279009 "Media Not Found" で失敗した場合は、Meta 側の非同期伝播による
 // 一時的失敗として、実行時間予算が残る範囲でコンテナを作り直して再試行する（初回を含めて最大 3 回）。
 // それ以外の失敗は 1 回で失敗とする。
-// isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像は無視する。
+// isGhost=true のときはテキストのみ（media_type=TEXT）で is_ghost_post を付与し、画像・動画は無視する。
 // deadline は絶対時刻（ミリ秒）で、この投稿に使える実行時間の上限を表す。
-const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline }) => {
+const doThreadsPost = async ({ token, text, imageUrls, videoUrl, reply_to_id, quote_to_id, isGhost, deadline }) => {
   let lastResult;
 
   for (let attempt = 1; attempt <= MAX_PUBLISH_ATTEMPTS; attempt++) {
@@ -270,7 +284,7 @@ const doThreadsPost = async ({ token, text, imageUrls, reply_to_id, quote_to_id,
       console.warn(`threads publish failed transiently; retrying with a new container (attempt ${attempt}/${MAX_PUBLISH_ATTEMPTS})`);
     }
 
-    lastResult = await doThreadsPostOnce({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost, deadline });
+    lastResult = await doThreadsPostOnce({ token, text, imageUrls, videoUrl, reply_to_id, quote_to_id, isGhost, deadline });
 
     if (lastResult.ok || lastResult.retryable !== true) {
       break;
@@ -352,11 +366,21 @@ const handler = async (event) => {
     }
     const token = stored.token.access_token;
 
-    const { text, images, reply_to_id, quote_to_id } = JSON.parse(event.body);
+    const { text, images, video, reply_to_id, quote_to_id } = JSON.parse(event.body);
     const imageUrls = Array.isArray(images) ? images : [];
+    const videoUrl = (typeof video === 'string' && video.length > 0) ? video : null;
+
+    // 動画と画像の併用は不可（フロントでも排他制御するが、サーバー側でも拒否する）
+    if (videoUrl != null && imageUrls.length > 0) {
+      return errorResponse(400, 'cannot post video with images');
+    }
+    // 動画とリプライ・引用の併用は不可
+    if (videoUrl != null && ((reply_to_id != null && reply_to_id !== '') || (quote_to_id != null && quote_to_id !== ''))) {
+      return errorResponse(400, 'cannot post video with reply or quote');
+    }
 
     // 本投稿
-    const result = await doThreadsPost({ token, text, imageUrls, reply_to_id, quote_to_id, isGhost: false, deadline });
+    const result = await doThreadsPost({ token, text, imageUrls, videoUrl, reply_to_id, quote_to_id, isGhost: false, deadline });
     if (!result.ok) {
       return errorResponse(result.statusCode, result.error);
     }

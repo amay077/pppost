@@ -15,11 +15,13 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 - **THEN** 選択された動画が `<video>` 要素でプレビュー表示される
 - **AND** 投稿時にその動画が添付される
 
-#### Scenario: 動画と画像の併用はできない（Cannot mix video and images）
+#### Scenario: 動画添付中は画像を追加できない（Cannot add images while a video is attached）
 
 - **GIVEN** ユーザーが動画を添付済みである
 - **WHEN** 画像を追加しようとする
 - **THEN** 画像の追加は受け付けられない
+
+#### Scenario: 画像添付中は動画を追加できない（Cannot add a video while images are attached）
 
 - **GIVEN** ユーザーが画像を添付済みである
 - **WHEN** 動画を追加しようとする
@@ -33,7 +35,7 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: 動画の許容上限チェック（Validate video size and duration）
 
-システムは、選択された動画が 100MB を超える場合、または再生時間が 5 分（300 秒）を超える場合、その動画を添付として受け付けず、ユーザーにエラーを通知しなければならない (SHALL)。この上限チェックは動画の選択時（アップロード前）に行わなければならない (SHALL)。再生時間の取得ができない場合（メタデータ読み取り失敗など）、システムは動画を添付として受け付けてはならず (SHALL NOT)、ユーザーにエラーを通知しなければならない (SHALL)。
+システムは、選択された動画が 100MB を超える場合、または再生時間が 3 分（180 秒）を超える場合、その動画を添付として受け付けず、ユーザーにエラーを通知しなければならない (SHALL)。この上限チェックは動画の選択時（アップロード前）に行わなければならない (SHALL)。再生時間の取得ができない場合（メタデータ読み取り失敗など）、システムは動画を添付として受け付けてはならず (SHALL NOT)、ユーザーにエラーを通知しなければならない (SHALL)。再生時間の上限は投稿対象 SNS のうち最も厳しい制限（Bluesky の 3 分、2026 年時点の公式制限）に合わせたものである。Bluesky の制限が今後変更された場合、システムはその制限を確認して上限を更新しなければならない (SHALL)。
 
 #### Scenario: 上限を超えるサイズの動画（Video exceeds 100MB）
 
@@ -41,9 +43,9 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 - **WHEN** 動画の選択が完了する
 - **THEN** 動画は添付されず、サイズ上限超過のエラーがユーザーに通知される
 
-#### Scenario: 上限を超える再生時間の動画（Video exceeds 5 minutes）
+#### Scenario: 上限を超える再生時間の動画（Video exceeds 3 minutes）
 
-- **GIVEN** ユーザーが再生時間 5 分を超える動画ファイルを選択する
+- **GIVEN** ユーザーが再生時間 3 分を超える動画ファイルを選択する
 - **WHEN** 動画の選択が完了する
 - **THEN** 動画は添付されず、再生時間上限超過のエラーがユーザーに通知される
 
@@ -72,7 +74,7 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Bluesky への動画投稿（Post video to Bluesky）
 
-システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と alt テキスト）を指定して投稿しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
+システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と自動生成の alt テキスト）を指定して投稿しなければならない (SHALL)。alt テキストは画像投稿と同様に自動生成（例: `Video`）しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。日次アップロード上限（`app.bsky.video.getUploadLimits`）超過など `uploadVideo` の失敗についても、同様にエラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
 
 #### Scenario: 動画を Bluesky に投稿する（Post video to Bluesky successfully）
 
@@ -98,7 +100,7 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Threads への動画投稿（Post video to Threads）
 
-システムは、Threads が投稿対象に選択され、動画が添付されているとき、バックエンドが R2 の動画公開 URL を `video_url` に指定した `media_type=VIDEO` のメディアコンテナを作成し、コンテナの処理完了（`FINISHED`）を待ってから公開しなければならない (SHALL)。動画投稿のコンテナ完了待ち・公開リトライは、画像投稿と同一のフロー（既存の実行時間予算・`code:24 / subcode:4279009` のコンテナ再作成リトライを含む）に従わなければならない (SHALL)。動画が添付されている場合、システムは画像のカルーセルとして投稿してはならない (SHALL NOT)。
+システムは、Threads が投稿対象に選択され、動画が添付されているとき、バックエンドが R2 の動画公開 URL を `video_url` に指定した `media_type=VIDEO` のメディアコンテナを作成し、コンテナの処理完了（`FINISHED`）を待ってから公開しなければならない (SHALL)。動画投稿のコンテナ完了待ち・公開リトライは、画像投稿と同一のフロー（既存の実行時間予算・`code:24 / subcode:4279009` のコンテナ再作成リトライを含む）に従わなければならない (SHALL)。動画が添付されている場合、システムは画像のカルーセルとして投稿してはならない (SHALL NOT)。ゴースト投稿（`is_ghost_post=true`）時は、画像と同様に添付動画を無視し、`media_type=TEXT` のコンテナを作成しなければならない (SHALL)。
 
 #### Scenario: 動画を Threads に投稿する（Post video to Threads successfully）
 
@@ -152,9 +154,37 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 - **WHEN** 共有ボタンを押下する
 - **THEN** 動画は含まれず、テキストのみが共有シートで共有される
 
+### Requirement: 動画投稿時のリプライ・引用の禁止（Cannot reply or quote with video）
+
+システムは、動画が添付された投稿について、リプライ元または引用元を指定してはならない (SHALL NOT)。動画を添付している状態でリプライ元または引用元を選択できてはならず (SHALL NOT)、動画を添付した際にリプライ元・引用元の選択が解除されなければならない (SHALL)。バックエンドが動画とリプライ元・引用元の指定を同時に受信した場合、その投稿を 400 で拒否しなければならない (SHALL)。これは動画とリプライ・引用の併用が各 SNS の API 仕様で安定しないため、動画投稿は通常投稿のみに限定するものである。
+
+#### Scenario: 動画添付中はリプライ元を選択できない（Cannot select reply target with video）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **WHEN** リプライ元の選択を試みる
+- **THEN** リプライ元の選択は受け付けられない
+
+#### Scenario: 動画添付中は引用元を選択できない（Cannot select quote target with video）
+
+- **GIVEN** ユーザーが動画を添付済みである
+- **WHEN** 引用元の選択を試みる
+- **THEN** 引用元の選択は受け付けられない
+
+#### Scenario: 動画添付時にリプライ・引用の選択が解除される（Selection cleared when video is attached）
+
+- **GIVEN** ユーザーがリプライ元または引用元を選択済みである
+- **WHEN** 動画を添付する
+- **THEN** リプライ元・引用元の選択が解除される
+
+#### Scenario: バックエンドが動画とリプライ・引用を同時受信したら拒否する（Backend rejects video with reply or quote）
+
+- **GIVEN** バックエンドが動画とリプライ元（または引用元）の指定を含む投稿リクエストを受信する
+- **WHEN** 投稿処理が開始される
+- **THEN** 投稿は 400 で拒否され、いずれの SNS にも投稿されない
+
 ### Requirement: 動画投稿失敗時のエラー通知（Video post failure notification）
 
-システムは、動画付き投稿の失敗（各 SNS への投稿・アップロードの失敗）を無言で握りつぶしてはならず (SHALL NOT)、失敗した SNS 名をエラー一覧へ追加してユーザーへ通知しなければならない (SHALL)。これはテキスト・画像投稿の既存のエラー通知と同一の仕組みに従うものとする (SHALL)。
+システムは、動画付き投稿の失敗を無言で握りつぶしてはならず (SHALL NOT)、失敗した SNS 名をエラー一覧へ追加してユーザーへ通知しなければならない (SHALL)。これはテキスト・画像投稿の既存のエラー通知と同一の仕組みに従うものとする (SHALL)。R2 への動画アップロード（署名付き URL 発行・PUT）が失敗した場合は、いずれの SNS にも到達していないため、各 SNS への投稿を試行してはならず (SHALL NOT)、投稿全体を中止して共通エラーとしてユーザーへ通知しなければならない (SHALL)。
 
 #### Scenario: 動画投稿の失敗を通知する（Notify user of video post failure）
 

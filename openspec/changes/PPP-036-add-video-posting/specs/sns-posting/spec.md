@@ -2,7 +2,7 @@
 
 ### Requirement: 動画と画像の併用禁止（Cannot mix videos and images）
 
-システムは、動画が添付された投稿について、画像を同時に添付してはならない (SHALL NOT)。画像が添付された投稿に動画を同時に添付してはならない (SHALL NOT)。動画を添付する場合の各 SNS への投稿の振る舞いは `video-posting` capability に従う。
+システムは、動画が添付された投稿について、画像を同時に添付してはならない (SHALL NOT)。画像が添付された投稿に動画を同時に添付してはならない (SHALL NOT)。動画の選択・上限チェック・各 SNS への投稿の振る舞いは `video-posting` capability に従う。
 
 #### Scenario: 動画と画像の同時添付はできない（Video and images cannot coexist）
 

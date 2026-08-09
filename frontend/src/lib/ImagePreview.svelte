@@ -7,6 +7,8 @@
 
   // export let imageDataURLs: string[] = [];
   export let images: ImageData[] = [];
+  // 動画添付中など画像追加を無効化したい場合に true（動画と画像は排他のため）
+  export let disabled = false;
 
   let fileInput: HTMLInputElement;
   let showCropModal = false;
@@ -25,6 +27,7 @@
   onMount(() => {
     // ペーストイベントの処理
     document.addEventListener("paste", async (event: ClipboardEvent) => {
+      if (disabled) return;
       if (!event.clipboardData) return;
       for (const item of event.clipboardData.items) {
         if (!item.type.startsWith(`image/`)) {
@@ -48,6 +51,7 @@
 
   // ファイル選択時の処理
   const onChange = async (evt: Event) => {
+    if (disabled) return;
     const target = evt.target as HTMLInputElement;
     const files = target.files ?? [];
     if (files.length === 0) return;
@@ -170,6 +174,7 @@
     <!-- multiple を再度有効化 -->
     <input bind:this={fileInput} type="file" style="display: none" accept="image/*" multiple on:change={onChange} />
     <button class="btn btn-sm btn-block btn-primary"
+      disabled={disabled}
       on:click={() => {
         fileInput.click()
       }}

@@ -80,8 +80,25 @@ const handler = async (event) => {
     }
     const sessionData = stored.token;
 
-    const { text, images, reply_to_id, quote_to_id } = JSON.parse(event.body);
-    console.log('Bluesky post request:', { text, images: images?.length, reply_to_id });
+    const { text, images, video, reply_to_id, quote_to_id } = JSON.parse(event.body);
+    console.log('Bluesky post request:', { text, images: images?.length, video: video != null, reply_to_id });
+
+    // 動画と画像の併用は不可（フロントでも排他制御するが、サーバー側でも拒否する）
+    if (video != null && Array.isArray(images) && images.length > 0) {
+      return {
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'cannot post video with images' })
+      };
+    }
+    // 動画とリプライ・引用の併用は不可
+    if (video != null && ((reply_to_id?.length ?? 0) > 0 || (quote_to_id?.length ?? 0) > 0)) {
+      return {
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'cannot post video with reply or quote' })
+      };
+    }
 
     // Bluesky Agentの初期化
     const agent = new BskyAgent({
@@ -93,7 +110,7 @@ const handler = async (event) => {
     const did = sessionRes?.data?.did;
 
     // トークンリフレッシュ
-    await agent.refreshSession();
+    await agent.sessionManager.refreshSession();
 
     // 更新されたセッションデータを D1 に書き戻す（クライアントへは返さない）
     await saveToken(sessionId, 'bluesky', agent.session, {
@@ -225,9 +242,84 @@ const handler = async (event) => {
       }
     };
 
-    // OGP処理（画像がない場合のみ）
+    // 動画処理（app.bsky.video.uploadVideo → getJobStatus ポーリング → app.bsky.embed.video）
+    // 動画は画像・OGP と併用できない（フロントとサーバー側バリデーションで排他済み）
+    const embedVideo = await (async () => {
+      if (video == null || video.length === 0) {
+        return undefined;
+      }
+
+      console.log(`Processing video: ${video}`);
+
+      // ストレージ (R2) の公開URLから動画を取得
+      const videoRes = await fetch(video);
+      if (!videoRes.ok) {
+        console.error(`Failed to fetch video from ${video}: ${videoRes.status}`);
+        return null;
+      }
+      const videoBuffer = await videoRes.buffer();
+      console.log(`Fetched video: ${videoBuffer.length} bytes`);
+
+      // Bluesky は video/mp4 のみ受け付ける
+      const encoding = 'video/mp4';
+
+      // 動画をアップロードし処理ジョブを開始する
+      const { data: uploadData } = await agent.app.bsky.video.uploadVideo(
+        videoBuffer,
+        { encoding }
+      );
+      const jobId = uploadData.jobStatus.jobId;
+      console.log(`Video upload job started: ${jobId}`);
+
+      // 処理完了（JOB_STATE_COMPLETED）をポーリングする
+      // バックエンド（Netlify 同期 Function）の実行時間制約（約 10 秒）に収めるため、
+      // 動画取得・アップロードの所要時間を考慮し、ポーリングは最大 4 回（計 4 秒）で打ち切る
+      const VIDEO_POLL_MAX_ATTEMPTS = 4;
+      const VIDEO_POLL_INTERVAL_MS = 1000;
+
+      let jobStatus = uploadData.jobStatus;
+      for (let i = 0; i < VIDEO_POLL_MAX_ATTEMPTS; i++) {
+        const st = jobStatus.state;
+        console.log(`Video job status (attempt ${i + 1}): ${st} (${jobStatus.progress}%)`);
+        if (st === 'JOB_STATE_COMPLETED') {
+          break;
+        }
+        if (st === 'JOB_STATE_FAILED') {
+          console.error(`Video job failed: ${jobStatus.failureCode} ${jobStatus.message}`);
+          return null;
+        }
+        await new Promise((resolve) => setTimeout(resolve, VIDEO_POLL_INTERVAL_MS));
+        const { data: statusData } = await agent.app.bsky.video.getJobStatus({ jobId });
+        jobStatus = statusData.jobStatus;
+      }
+
+      if (jobStatus.state !== 'JOB_STATE_COMPLETED') {
+        console.error(`Video job not completed within budget: ${jobStatus.state}`);
+        return null;
+      }
+
+      return {
+        $type: 'app.bsky.embed.video',
+        video: jobStatus.blob,
+        alt: 'Video',
+      };
+    })();
+
+    // 動画処理に失敗した場合
+    if (video != null && embedVideo === null) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Failed to process video' })
+      };
+    }
+
+    // OGP処理（画像・動画がない場合のみ）
     const embedOgp = await (async () => {
       if (embedImages) return undefined; // 画像がある場合はOGPを使わない
+      if (embedVideo) return undefined; // 動画がある場合はOGPを使わない
       
       const uri = findUrlInText(rt);
       if (!uri) return undefined;
@@ -396,8 +488,9 @@ const handler = async (event) => {
     }
 
     // embed を組み立てる
+    // 動画あり: 動画のみ（app.bsky.embed.video）。画像・OGP・引用との併用はバリデーションで排他済み
     // 引用あり: 画像・OGP が無ければ app.bsky.embed.record、あれば recordWithMedia で共存させる
-    let embed = embedImages || embedOgp;
+    let embed = embedVideo ?? embedImages ?? embedOgp;
     if (quoteEmbed != null) {
       if (embed != null) {
         embed = {

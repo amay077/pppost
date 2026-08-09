@@ -1,5 +1,47 @@
 import { Config } from '../config';
 
+// 署名付きURLを使用してファイル（画像・動画）をストレージ (Cloudflare R2) にアップロード。
+// 動画はサイズが大きいため base64 化せず、Blob のまま直接 PUT する。
+export async function uploadBlobToStorage(blob: Blob, filename: string): Promise<string | null> {
+  try {
+    // バックエンドから署名付きURLを取得（Content-Type はサーバーが拡張子から決定する）
+    const presignedRes = await fetch(`${Config.API_ENDPOINT}/r2_presigned_url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ filename }),
+    });
+
+    if (!presignedRes.ok) {
+      console.error('Failed to get presigned URL:', presignedRes.status);
+      return null;
+    }
+
+    const { uploadUrl, publicUrl, contentType } = await presignedRes.json();
+
+    // 署名付きURLを使用してアップロード
+    // 署名生成時の ContentType と一致させる必要があるため、サーバーから受け取った contentType をそのまま使う
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+      },
+      body: blob,
+    });
+
+    if (!uploadRes.ok) {
+      console.error('Failed to upload file:', uploadRes.status);
+      return null;
+    }
+
+    return publicUrl;
+  } catch (error) {
+    console.error('Error uploading to storage:', error);
+    return null;
+  }
+}
+
 // 署名付きURLを使用して画像をストレージ (Cloudflare R2) にアップロード
 export async function uploadImageToStorage(base64Data: string, filename: string = 'image.png'): Promise<string | null> {
   try {
