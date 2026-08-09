@@ -11,6 +11,7 @@ import { loadMessage, loadPostSetting, loadSessionId, saveMessage, savePostSetti
 import { Config } from "../config";
 import { getApiVersion, getSpaVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
+import { loadImageAsDataURL } from "./image-func";
 import dayjs from "dayjs";
 
 const built_at = (window as any)['built_at'] ?? '';
@@ -111,6 +112,67 @@ const onSelectVideo = async (evt: Event) => {
 $: if (images.length > 0 && videoFile != null) {
   setVideoFile(null);
 }
+
+// 本文エリアへのファイル ドラッグ&ドロップ
+let isDragOver = false;
+
+const handleDragOver = (evt: DragEvent) => {
+  evt.preventDefault();
+  isDragOver = true;
+};
+
+const handleDragLeave = (evt: DragEvent) => {
+  evt.preventDefault();
+  // 子要素（textarea 等）へ移る際にも dragleave が発火するため、ゾーン外へ出た場合のみ解除する
+  const next = evt.relatedTarget;
+  if (next == null || !(evt.currentTarget as Element).contains(next as Node)) {
+    isDragOver = false;
+  }
+};
+
+const handleDrop = async (evt: DragEvent) => {
+  evt.preventDefault();
+  isDragOver = false;
+  const files = Array.from(evt.dataTransfer?.files ?? []);
+  if (files.length == 0) return;
+
+  const imageFiles = files.filter(f => f.type.startsWith('image/'));
+  const videoFiles = files.filter(f => f.type.startsWith('video/'));
+
+  // 画像と動画が混在する場合は動画を優先し、画像は無視する
+  if (videoFiles.length > 0) {
+    await onDropVideo(videoFiles[0]);
+  } else if (imageFiles.length > 0) {
+    await onDropImages(imageFiles);
+  }
+};
+
+const onDropImages = async (files: File[]) => {
+  // 動画が添付済みなら解除してから画像を追加する（動画と画像の排他）
+  if (videoFile != null) {
+    setVideoFile(null);
+  }
+  const newImages: ImageData[] = [];
+  for (const file of files) {
+    const url = await loadImageAsDataURL(file);
+    newImages.push({ id: crypto.randomUUID(), originalUrl: url, croppedUrl: null });
+  }
+  images = [...images, ...newImages];
+};
+
+const onDropVideo = async (file: File) => {
+  videoError = null;
+  // 既存の動画ボタン選択と同一のバリデーション・排他制御を適用する
+  const error = await validateVideo(file);
+  if (error != null) {
+    videoError = error;
+    return;
+  }
+  images = [];
+  replyToPost = emptyPresentedPost();
+  quoteToPost = emptyPresentedPost();
+  setVideoFile(file);
+};
 
 let expandedReply = false;
 let replyToPost: PresentedPost = {
@@ -667,7 +729,7 @@ const getTypes = (post: PresentedPost) => {
 
 <div class="mt-4">
 
-  <div class="mb-3">
+  <div class="mb-3 drop-zone {isDragOver ? 'drop-zone-active' : ''}" on:dragover={handleDragOver} on:dragleave={handleDragLeave} on:drop={handleDrop}>
     <div class="d-flex justify-content-between align-items-center"> <!-- Message ラベルと文字数を両端に配置 -->
       <span class="h5">Message:</span>
       <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
@@ -898,3 +960,11 @@ const getTypes = (post: PresentedPost) => {
   <span>api_ver: {apiVer.env_ver}</span>
   {/if}
 </div>
+
+<style>
+  .drop-zone-active {
+    outline: 2px dashed #1e7e34;
+    outline-offset: 4px;
+    background-color: rgba(30, 126, 52, 0.05);
+  }
+</style>
