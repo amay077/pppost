@@ -1,17 +1,13 @@
 const fetch = require('node-fetch');
-const FormData = require('form-data');
 const { extractSessionId } = require('../lib/session');
 const { getToken } = require('../lib/token-store');
 const { isValidMisskeyHost, buildMisskeyOrigin } = require('../lib/misskey-host');
 
 // misskey_post が 202 を返した動画投稿の最終化エンドポイント。
-// R2 から動画を取得して drive/files/create（write:drive 権限）で drive へアップロードし、
+// drive/files/upload-from-url による Misskey 側の非同期取り込み（ダウンロード・サムネイル生成）が
+// 完了するのを待ち、drive/files（read:drive 権限）から URL 由来のファイル名で対象を特定して、
 // そのファイル ID を fileIds に含めて notes/create でノートを作成する。
 // クライアントは 202 が返る間ポーリングし、200 で完了する。
-//
-// 設計メモ: drive からのファイル検索（drive/files）は read:drive 権限が必要だが、
-// アプリの MiAuth は write:notes,write:drive,read:account のみを要求するため
-// （再接続を強制しないため）、検索 API は使わない。
 
 const errorResponse = (statusCode, error) => ({
   statusCode,
@@ -66,45 +62,60 @@ const handler = async (event) => {
       return errorResponse(400, 'video_url required');
     }
 
-    // ストレージ (R2) の公開URLから動画を取得
-    const startedAt = Date.now();
-    const videoRes = await fetch(video_url);
-    if (!videoRes.ok) {
-      console.error(`Failed to fetch video from ${video_url}: ${videoRes.status}`);
-      return errorResponse(500, 'Failed to fetch video');
+    // R2 の動画 URL のファイル名（= drive に保存されるファイル名）を求める
+    // 例: https://pub-xxx.r2.dev/pppost/video/1786269188476-abc123.mp4 → 1786269188476-abc123.mp4
+    let filename;
+    try {
+      filename = decodeURIComponent(new URL(video_url).pathname.split('/').pop() ?? '');
+    } catch {
+      return errorResponse(400, 'invalid video_url');
     }
-    const videoBuffer = await videoRes.buffer();
-    const contentType = videoRes.headers.get('content-type') || 'video/mp4';
-    const ext = contentType.split('/')[1] || 'mp4';
-    console.log(`Fetched video: ${videoBuffer.length} bytes (${contentType})`);
+    if (filename.length === 0) {
+      return errorResponse(400, 'cannot resolve filename from video_url');
+    }
 
-    // drive/files/create で drive へアップロードする（write:drive 権限・画像投稿と同じ経路）
-    // 動画サムネイル生成（ffmpeg）などで時間がかかることがあるが、
-    // 本関数は独立した呼び出しのため、実行時間制限をフルに使える。
-    // タイムアウト後に再試行された場合、同一ハッシュの既存ファイルが返されるため収束する。
-    const formData = new FormData();
-    formData.append('file', videoBuffer, {
-      filename: `video.${ext}`,
-      contentType,
-    });
-
-    const uploadRes = await fetch(`${origin}/api/drive/files/create`, {
+    // drive から対象ファイルを探す（動画のみ・作成日時降順の直近 100 件から名前照合）
+    // drive/files は read:drive 権限が必要（アプリの MiAuth は read:drive を含めて要求する）
+    const filesRes = await fetch(`${origin}/api/drive/files`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        ...formData.getHeaders()
+        'Content-Type': 'application/json',
       },
-      body: formData
+      body: JSON.stringify({
+        type: 'video/*',
+        sort: '-createdAt',
+        limit: 100,
+      }),
     });
 
-    if (!uploadRes.ok) {
-      console.error(`Failed to upload video to Misskey:`, uploadRes.status, await uploadRes.text());
-      return errorResponse(500, 'Failed to upload video to Misskey');
+    if (!filesRes.ok) {
+      const bodyText = await filesRes.text();
+      console.error(`Failed to fetch drive files: ${filesRes.status}`, bodyText);
+      // 権限不足（再連携前のセッション）の場合は原因が分かるエラーを返す
+      if (filesRes.status === 403 && bodyText.includes('PERMISSION_DENIED')) {
+        return errorResponse(500, 'Misskey の再連携が必要です（read:drive 権限）。Misskey 接続をやり直してください');
+      }
+      return errorResponse(500, 'Failed to fetch drive files');
     }
 
-    const uploadData = await uploadRes.json();
-    const fileId = uploadData.id;
-    console.log(`Uploaded video to drive: ${fileId} (${Date.now() - startedAt} ms)`);
+    const files = await filesRes.json();
+    const fileList = Array.isArray(files) ? files : [];
+    console.log(`misskey drive search: looking for "${filename}", ${fileList.length} recent video file(s) found`);
+    console.log('misskey drive file names:', fileList.map((f) => `${f.name} (${f.id})`).join(', ') || '(none)');
+    const target = fileList.find((f) => f.name === filename);
+
+    if (target == null) {
+      // まだ Misskey 側の取り込み・処理が完了していない: クライアントに再ポーリングを促す
+      console.log(`misskey drive file not found yet: ${filename}`);
+      return {
+        statusCode: 202,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'processing', video_url }),
+      };
+    }
+
+    console.log(`misskey drive file found: ${target.id} (${target.name})`);
 
     // ノートを作成する
     const noteRes = await fetch(`${origin}/api/notes/create`, {
@@ -116,7 +127,7 @@ const handler = async (event) => {
       body: JSON.stringify({
         text,
         visibility: 'public',
-        fileIds: [fileId],
+        fileIds: [target.id],
       }),
     });
 

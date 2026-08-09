@@ -330,7 +330,7 @@ const postToMisskey = async (text: string, imageUrls: string[], videoUrl: string
 // 取り込み完了後に misskey_video_finalize がノートを作成し、200 が返ったら true。
 const finalizeMisskeyVideo = async (text: string, video_url: string): Promise<boolean> => {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  const FINALIZE_POLL_MAX_ATTEMPTS = 20; // 3 秒間隔で最大 60 秒待つ
+  const FINALIZE_POLL_MAX_ATTEMPTS = 30; // 3 秒間隔で最大 90 秒待つ（misskey.io の非同期取り込みの完了を待つ）
   const FINALIZE_POLL_INTERVAL_MS = 3000;
 
   for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {

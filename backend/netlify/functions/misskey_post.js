@@ -78,17 +78,39 @@ const handler = async (event) => {
       };
     }
 
-    // 動画: アップロード・ノート作成は misskey_video_finalize に委ねる。
-    // 動画の drive アップロードは動画サムネイル生成（ffmpeg）などで 30 秒を超えることがあり、
-    // Netlify 同期 Function の実行時間制限に収まらないため、非同期最終化方式とする。
-    // （misskey_video_finalize は drive/files/create = write:drive 権限で動作する）
+    // 動画: drive/files/upload-from-url で Misskey 側が非同期に取り込む。
+    // drive/files/create での直接アップロードは動画サムネイル生成（ffmpeg）などで
+    // Netlify 同期 Function の実行時間制限（30 秒）を超えるため、非同期最終化方式とする。
+    // force: true で同一ハッシュの既存ファイル再利用を防ぎ、URL 由来の一意なファイル名を
+    // drive に保持させる（misskey_video_finalize が drive/files で名前照合するため）。
     if (hasVideo) {
+      const uploadRes = await fetch(`${origin}/api/drive/files/upload-from-url`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: video,
+          force: true,
+        }),
+      });
+
+      if (!uploadRes.ok) {
+        console.error(`Failed to request drive upload from url:`, uploadRes.status, await uploadRes.text());
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'Failed to request video upload to Misskey' })
+        };
+      }
+
       const response = {
         statusCode: 202,
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'processing', video_url: video }),
       };
-      console.info('misskey video post requested, waiting for finalize', response.body);
+      console.info('misskey video upload requested, waiting for finalize', response.body);
       return response;
     }
 

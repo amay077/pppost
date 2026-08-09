@@ -139,19 +139,19 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Misskey への動画投稿（Post video to Misskey）
 
-システムは、Misskey が投稿対象に選択され、動画が添付されているとき、バックエンドが `drive/files/create` で動画を drive へアップロードし、そのファイル ID を `fileIds` に含めて `notes/create` でノートを作成しなければならない (SHALL)。動画の drive アップロードは動画サムネイル生成（ffmpeg）などで 1 回の同期呼び出しの実行時間予算を超えることがあるため、システムは非同期最終化（`misskey_video_finalize`）の仕組みを用いなければならない (SHALL)。バックエンドは `video_url` を HTTP 202 でクライアントへ返し、クライアントは別エンドポイント（`misskey_video_finalize`）をポーリングして、drive へのアップロードとノート作成を行わせなければならない (SHALL)。drive からのファイル検索（`drive/files`）は `read:drive` 権限を必要とし、アプリの MiAuth は `write:notes,write:drive,read:account` のみを要求するため使用してはならない (SHALL NOT)。アップロード・ノート作成に失敗した場合、システムはその投稿を失敗として扱い、エラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
+システムは、Misskey が投稿対象に選択され、動画が添付されているとき、バックエンドが `drive/files/upload-from-url` で Misskey サーバーに動画 URL からの非同期取り込みを依頼し、取り込み完了後に `drive/files` から対象ファイルを特定して、そのファイル ID を `fileIds` に含めて `notes/create` でノートを作成しなければならない (SHALL)。動画の drive への直接アップロード（`drive/files/create`）は動画サムネイル生成（ffmpeg）などで 1 回の同期呼び出しの実行時間予算（30 秒）を超えることがあるため、システムは非同期最終化（`misskey_video_finalize`）の仕組みを用いなければならない (SHALL)。バックエンドは取り込み依頼の完了後に `video_url` を HTTP 202 でクライアントへ返し、クライアントは別エンドポイント（`misskey_video_finalize`）をポーリングして、取り込み完了後にノート作成を行わせなければならない (SHALL)。`drive/files` によるファイル検索は `read:drive` 権限を必要とするため、システムは Misskey 接続時に `read:drive` を含む権限を要求しなければならない (SHALL)。取り込み・ノート作成に失敗した場合、システムはその投稿を失敗として扱い、エラー一覧に `Misskey` を含めてユーザーへ通知しなければならない (SHALL)。
 
 #### Scenario: 動画を Misskey に投稿する（Post video to Misskey successfully）
 
 - **GIVEN** ユーザーが Misskey を投稿対象に選択し、本文と動画を入力している
 - **WHEN** 投稿ボタンを押下する
-- **THEN** バックエンドが `video_url` を HTTP 202 で返す
-- **AND** `misskey_video_finalize` が `drive/files/create` で drive へアップロードし、`fileIds` でノートを作成して投稿が成功する
+- **THEN** バックエンドが `drive/files/upload-from-url` で動画の非同期取り込みを依頼し、`video_url` を HTTP 202 で返す
+- **AND** 取り込み完了後に `misskey_video_finalize` が `drive/files` からファイルを特定し、`fileIds` でノートを作成して投稿が成功する
 
-#### Scenario: 動画の drive アップロードが失敗する（Video upload to drive fails）
+#### Scenario: 動画の drive 取り込みが失敗する（Video upload to drive fails）
 
 - **GIVEN** ユーザーが Misskey を投稿対象に選択し、動画を添付している
-- **AND** 動画のアップロード・ノート作成が失敗する状態である（サーバーの容量制限・形式制限など）
+- **AND** 動画の取り込み・ノート作成が失敗する状態である（サーバーの容量制限・形式制限など）
 - **WHEN** 投稿ボタンを押下する
 - **THEN** ノートは作成されず、Misskey 投稿が失敗として扱われる
 - **AND** エラー一覧に `Misskey` が含まれ、ユーザーへ投稿失敗が通知される

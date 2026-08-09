@@ -58,11 +58,13 @@
 
 ## 7. Misskey の動画投稿（バックエンド）
 
-- [x] 7.1 動画投稿を非同期最終化（`misskey_post` は 202 + `video_url` を返す）に変更する
-- [x] 7.2 `misskey_video_finalize` 関数を追加し、R2 から動画を取得して `drive/files/create`（`write:drive` 権限）でアップロードし、`notes/create` でノートを作成する
-- [x] 7.3 drive からのファイル検索（`drive/files` = `read:drive` 権限）は使用しない（MiAuth は `write:notes,write:drive,read:account` のみで、再接続を強制しないため）
-- [x] 7.4 動画のアップロード・ノート作成失敗時はノートを作成せず失敗を返すことを確認する
-- [x] 7.5 フロントが 202 受信時に `misskey_video_finalize` をポーリングし、完了後に成功とする
+- [x] 7.1 動画投稿を非同期最終化（`misskey_post` は `drive/files/upload-from-url` への取り込み依頼後に 202 + `video_url` を返す）に変更する
+- [x] 7.2 `misskey_video_finalize` 関数を追加し、`drive/files`（`type: 'video/*'`・作成日時降順）から URL 由来のファイル名で対象を特定して `notes/create` でノートを作成する
+- [x] 7.3 取り込み完了前は 202 を返し、クライアントがポーリングする（`upload-from-url` は `force: true` で同一ハッシュの既存ファイル再利用を防ぎ、URL 由来の一意なファイル名を保持させる）
+- [x] 7.4 Misskey 接続時の MiAuth 権限に `read:drive` を追加する（`drive/files` 検索に必要。既存接続は再連携が必要）
+- [x] 7.5 403 PERMISSION_DENIED（再連携前のセッション）時は原因が分かるエラーを返す
+- [x] 7.6 動画の取り込み・ノート作成失敗時はノートを作成せず失敗を返すことを確認する
+- [x] 7.7 フロントが 202 受信時に `misskey_video_finalize` をポーリングし（最大 90 秒）、完了後に成功とする
 
 ## 8. 動作検証
 

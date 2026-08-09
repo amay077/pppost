@@ -23,7 +23,7 @@
 
     const params = new URLSearchParams({
       name: 'PPPOST',
-      permission: 'write:notes,write:drive,read:account',
+      permission: 'write:notes,write:drive,read:account,read:drive',
     });
     const url = `https://${misskeyHost}/miauth/${miauthSession}?${params.toString()}`;
 
