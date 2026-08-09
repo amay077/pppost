@@ -93,16 +93,22 @@ const handler = async (event) => {
     }
 
     const files = await filesRes.json();
-    const target = (Array.isArray(files) ? files : []).find((f) => f.name === filename);
+    const fileList = Array.isArray(files) ? files : [];
+    console.log(`misskey drive search: looking for "${filename}", ${fileList.length} recent video file(s) found`);
+    console.log('misskey drive file names:', fileList.map((f) => `${f.name} (${f.id})`).join(', ') || '(none)');
+    const target = fileList.find((f) => f.name === filename);
 
     if (target == null) {
       // まだ Misskey 側の取り込み・処理が完了していない: クライアントに再ポーリングを促す
+      console.log(`misskey drive file not found yet: ${filename}`);
       return {
         statusCode: 202,
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'processing', video_url }),
       };
     }
+
+    console.log(`misskey drive file found: ${target.id} (${target.name})`);
 
     // ノートを作成する
     const noteBody = { text, visibility: 'public', fileIds: [target.id] };
@@ -122,6 +128,7 @@ const handler = async (event) => {
 
     const created = await noteRes.json();
     const noteId = created?.createdNote?.id;
+    console.log(`misskey note created: ${noteId}`);
 
     const response = {
       statusCode: 200,
