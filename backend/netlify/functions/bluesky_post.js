@@ -266,6 +266,9 @@ const handler = async (event) => {
       // Bluesky は video/mp4 のみ受け付ける
       const encoding = 'video/mp4';
 
+      // 状態確認は video.bsky.app に対して行う（PDS は getJobStatus を実装していない）
+      const videoAgent = new BskyAgent({ service: 'https://video.bsky.app' });
+
       // app.bsky.video.uploadVideo は PDS ではなく動画サービス（video.bsky.app）が提供する。
       // PDS（bsky.social）への呼び出しは 501 MethodNotImplemented になるため、
       // 公式ドキュメント（Recommended method）に従い以下を実施する:
@@ -292,16 +295,52 @@ const handler = async (event) => {
         body: videoBuffer,
       });
       if (!uploadResponse.ok) {
-        console.error(`Video upload to video.bsky.app failed: ${uploadResponse.status}`, await uploadResponse.text());
+        const errorBody = await uploadResponse.json().catch(() => null);
+        console.error(`Video upload to video.bsky.app failed: ${uploadResponse.status}`, JSON.stringify(errorBody));
+
+        // 同一動画コンテンツが処理済みの場合（409 already_exists）、応答に処理済みジョブの jobId が含まれる。
+        // 動画サービスは動画をコンテンツハッシュで重複判定するため、同じ動画の再投稿で発生する。
+        // この jobId で getJobStatus を呼び、処理済み動画の BlobRef を取得する（公式ドキュメント推奨の扱い）。
+        if (uploadResponse.status === 409 && errorBody?.error === 'already_exists' && typeof errorBody?.jobId === 'string') {
+          const existingJobId = errorBody.jobId;
+          console.log(`Video already processed, reusing job: ${existingJobId}`);
+
+          let blob = null;
+          try {
+            const { data: statusData } = await videoAgent.app.bsky.video.getJobStatus({ jobId: existingJobId });
+            blob = statusData.jobStatus.blob ?? null;
+          } catch (statusError) {
+            // already_exists エラーには処理済み動画の BlobRef が含まれることがあるため、生応答を確認する
+            console.error(`getJobStatus for existing video failed:`, statusError.message, statusError.error);
+            try {
+              const rawRes = await fetch(
+                `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(existingJobId)}`
+              );
+              const rawBody = await rawRes.json();
+              blob = rawBody?.blob ?? null;
+            } catch (rawError) {
+              console.error(`Raw video job status check failed:`, rawError.message);
+            }
+          }
+
+          if (blob != null) {
+            return {
+              $type: 'app.bsky.embed.video',
+              video: blob,
+              alt: 'Video',
+            };
+          }
+
+          // BlobRef を即時取得できなかった場合は 202 で bluesky_video_finalize に任せる
+          videoJobId = existingJobId;
+          return { status: 'processing' };
+        }
         return null;
       }
       const uploadBody = await uploadResponse.json();
       const jobStatus = uploadBody.jobStatus ?? uploadBody;
       const jobId = jobStatus.jobId;
       console.log(`Video upload job started: ${jobId}`);
-
-      // 状態確認は video.bsky.app に対して行う（PDS は getJobStatus を実装していない）
-      const videoAgent = new BskyAgent({ service: 'https://video.bsky.app' });
 
       // 短時間だけポーリングして完了済みなら同期で投稿する（fast path）
       // 完了しなければ処理中（202）として扱い、bluesky_video_finalize で後続処理する
