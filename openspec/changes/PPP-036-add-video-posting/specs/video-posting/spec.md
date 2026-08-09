@@ -74,7 +74,7 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Bluesky への動画投稿（Post video to Bluesky）
 
-システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と自動生成の alt テキスト）を指定して投稿しなければならない (SHALL)。alt テキストは画像投稿と同様に自動生成（例: `Video`）しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。日次アップロード上限（`app.bsky.video.getUploadLimits`）超過など `uploadVideo` の失敗についても、同様にエラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
+システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と自動生成の alt テキスト）を指定して投稿しなければならない (SHALL)。これらの動画エンドポイントは動画サービス（`video.bsky.app`）が提供するため、システムは PDS ではなく動画サービスに対してアップロード・状態確認を行い、アップロードには `com.atproto.server.getServiceAuth` で発行したサービス トークンを使用しなければならない (SHALL)。alt テキストは画像投稿と同様に自動生成（例: `Video`）しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。日次アップロード上限（`app.bsky.video.getUploadLimits`）超過など `uploadVideo` の失敗についても、同様にエラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
 
 #### Scenario: 動画を Bluesky に投稿する（Post video to Bluesky successfully）
 
@@ -100,14 +100,24 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Threads への動画投稿（Post video to Threads）
 
-システムは、Threads が投稿対象に選択され、動画が添付されているとき、バックエンドが R2 の動画公開 URL を `video_url` に指定した `media_type=VIDEO` のメディアコンテナを作成し、コンテナの処理完了（`FINISHED`）を待ってから公開しなければならない (SHALL)。動画投稿のコンテナ完了待ち・公開リトライは、画像投稿と同一のフロー（既存の実行時間予算・`code:24 / subcode:4279009` のコンテナ再作成リトライを含む）に従わなければならない (SHALL)。動画が添付されている場合、システムは画像のカルーセルとして投稿してはならない (SHALL NOT)。ゴースト投稿（`is_ghost_post=true`）時は、画像と同様に添付動画を無視し、`media_type=TEXT` のコンテナを作成しなければならない (SHALL)。
+システムは、Threads が投稿対象に選択され、動画が添付されているとき、バックエンドが R2 の動画公開 URL を `video_url` に指定した `media_type=VIDEO` のメディアコンテナを作成し、コンテナの処理完了（`FINISHED`）を待ってから公開しなければならない (SHALL)。
 
-#### Scenario: 動画を Threads に投稿する（Post video to Threads successfully）
+動画コンテナの処理は Meta 側で数十秒かかることがあり、1 回の同期呼び出しの実行時間予算内に `FINISHED` にならないことがある。その場合、システムは投稿を失敗とせず、コンテナ作成結果として `creation_id` を HTTP 202 でクライアントへ返さなければならない (SHALL)。クライアントは別エンドポイント（`threads_video_finalize`）をポーリングし、バックエンドがコンテナの `FINISHED` を待って公開しなければならない (SHALL)。最終化（公開）の段階で `code:24 / subcode:4279009` "Media Not Found" の一時失敗が発生した場合は、画像投稿と同一のフロー（コンテナを作り直しての再試行・最大 3 回）に従わなければならない (SHALL)。コンテナの状態が `ERROR` または `EXPIRED` の場合、システムは公開せず、その投稿を失敗として扱い、エラー一覧に `Threads` を含めてユーザーへ通知しなければならない (SHALL)。動画が添付されている場合、システムは画像のカルーセルとして投稿してはならない (SHALL NOT)。ゴースト投稿（`is_ghost_post=true`）時は、画像と同様に添付動画を無視し、`media_type=TEXT` のコンテナを作成しなければならない (SHALL)。
+
+#### Scenario: 動画を Threads に投稿する（同期完了）（Post video to Threads synchronously）
 
 - **GIVEN** ユーザーが Threads を投稿対象に選択し、本文と動画を入力している
 - **WHEN** 投稿ボタンを押下する
 - **THEN** `media_type=VIDEO` のコンテナが `video_url`（R2 の動画公開 URL）付きで作成される
-- **AND** コンテナが `FINISHED` になるまで待機したのちに公開され、投稿が成功する
+- **AND** コンテナが実行時間予算内に `FINISHED` になり、同期のまま公開されて投稿が成功する
+
+#### Scenario: 動画コンテナの処理が予算内に完了せず、ポーリング後に公開される（Async finalize after polling）
+
+- **GIVEN** ユーザーが Threads を投稿対象に選択し、本文と動画を入力している
+- **AND** 動画コンテナの処理が 1 回の同期呼び出しの実行時間予算内に `FINISHED` にならない
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドは `creation_id` を HTTP 202 で返し、投稿は失敗として扱われない
+- **AND** クライアントが `threads_video_finalize` をポーリングし、コンテナが `FINISHED` になった後に公開されて投稿が成功する
 
 #### Scenario: 動画コンテナの公開が一時エラーで失敗し、再作成で成功する（Video publish retries after transient failure）
 

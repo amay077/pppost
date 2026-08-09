@@ -263,44 +263,93 @@ const handler = async (event) => {
       // Bluesky は video/mp4 のみ受け付ける
       const encoding = 'video/mp4';
 
-      // 動画をアップロードし処理ジョブを開始する
-      const { data: uploadData } = await agent.app.bsky.video.uploadVideo(
-        videoBuffer,
-        { encoding }
-      );
-      const jobId = uploadData.jobStatus.jobId;
-      console.log(`Video upload job started: ${jobId}`);
+      // app.bsky.video.uploadVideo は PDS ではなく動画サービス（video.bsky.app）が提供する。
+      // PDS（bsky.social）への呼び出しは 501 MethodNotImplemented になるため、
+      // 公式ドキュメント（Recommended method）に従い以下を実施する:
+      //   1. 動画サービスが PDS へ blob を保存するためのサービス トークンを発行
+      //   2. video.bsky.app へ動画を直接アップロード
+      //   3. video.bsky.app の getJobStatus で処理完了をポーリング
+      const { data: serviceAuth } = await agent.com.atproto.server.getServiceAuth({
+        aud: `did:web:${agent.dispatchUrl.host}`,
+        lxm: 'com.atproto.repo.uploadBlob',
+        exp: Math.floor(Date.now() / 1000) + 60 * 30, // 30 分
+      });
 
-      // 処理完了（JOB_STATE_COMPLETED）をポーリングする
+      const uploadUrl = new URL('https://video.bsky.app/xrpc/app.bsky.video.uploadVideo');
+      uploadUrl.searchParams.append('did', did);
+      uploadUrl.searchParams.append('name', 'video.mp4');
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceAuth.token}`,
+          'Content-Type': encoding,
+          'Content-Length': String(videoBuffer.length),
+        },
+        body: videoBuffer,
+      });
+      if (!uploadResponse.ok) {
+        console.error(`Video upload to video.bsky.app failed: ${uploadResponse.status}`, await uploadResponse.text());
+        return null;
+      }
+      const uploadBody = await uploadResponse.json();
+      const jobStatus = uploadBody.jobStatus ?? uploadBody;
+      console.log(`Video upload job started: ${jobStatus.jobId}`);
+
+      // 処理完了（blob の取得）をポーリングする
       // バックエンド（Netlify 同期 Function）の実行時間制約（約 10 秒）に収めるため、
       // 動画取得・アップロードの所要時間を考慮し、ポーリングは最大 4 回（計 4 秒）で打ち切る
       const VIDEO_POLL_MAX_ATTEMPTS = 4;
       const VIDEO_POLL_INTERVAL_MS = 1000;
 
-      let jobStatus = uploadData.jobStatus;
-      for (let i = 0; i < VIDEO_POLL_MAX_ATTEMPTS; i++) {
-        const st = jobStatus.state;
-        console.log(`Video job status (attempt ${i + 1}): ${st} (${jobStatus.progress}%)`);
-        if (st === 'JOB_STATE_COMPLETED') {
-          break;
-        }
+      // 状態確認は video.bsky.app に対して行う（PDS は getJobStatus を実装していない）
+      const videoAgent = new BskyAgent({ service: 'https://video.bsky.app' });
+
+      let currentStatus = jobStatus;
+      let blob = currentStatus.blob;
+      for (let i = 0; i < VIDEO_POLL_MAX_ATTEMPTS && blob == null; i++) {
+        const st = currentStatus.state;
+        console.log(`Video job status (attempt ${i + 1}): ${st} (${currentStatus.progress ?? 0}%)`);
         if (st === 'JOB_STATE_FAILED') {
-          console.error(`Video job failed: ${jobStatus.failureCode} ${jobStatus.message}`);
+          console.error(`Video job failed: ${currentStatus.failureCode} ${currentStatus.message}`);
           return null;
         }
         await new Promise((resolve) => setTimeout(resolve, VIDEO_POLL_INTERVAL_MS));
-        const { data: statusData } = await agent.app.bsky.video.getJobStatus({ jobId });
-        jobStatus = statusData.jobStatus;
+        try {
+          const { data: statusData } = await videoAgent.app.bsky.video.getJobStatus({ jobId: currentStatus.jobId });
+          currentStatus = statusData.jobStatus;
+          blob = currentStatus.blob ?? blob;
+        } catch (error) {
+          // 同一動画の再アップロード時など、動画が処理済みの場合（already_exists）は
+          // エラー応答に処理済み動画の BlobRef が含まれることがある（公式ドキュメント推奨の扱い）。
+          // XRPCError からは応答本文を取り出せないため、生のリクエストで BlobRef を確認する。
+          console.error(`Video job status check failed:`, error.message, error.error);
+          try {
+            const rawRes = await fetch(
+              `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(currentStatus.jobId)}`
+            );
+            const rawBody = await rawRes.json();
+            if (rawBody?.blob != null) {
+              blob = rawBody.blob;
+              break;
+            }
+          } catch (rawError) {
+            console.error(`Raw video job status check failed:`, rawError.message);
+          }
+          if (blob == null) {
+            return null;
+          }
+        }
       }
 
-      if (jobStatus.state !== 'JOB_STATE_COMPLETED') {
-        console.error(`Video job not completed within budget: ${jobStatus.state}`);
+      if (blob == null) {
+        console.error(`Video job not completed within budget: ${currentStatus.state}`);
         return null;
       }
 
       return {
         $type: 'app.bsky.embed.video',
-        video: jobStatus.blob,
+        video: blob,
         alt: 'Video',
       };
     })();

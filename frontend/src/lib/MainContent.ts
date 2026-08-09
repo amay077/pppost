@@ -354,11 +354,61 @@ const postToThreads = async (text: string, imageUrls: string[], videoUrl: string
       }),
     });
 
-    return res.ok;
+    if (res.ok) {
+      return true;
+    }
+
+    // 動画コンテナの処理が完了していない場合は 202 + creation_id が返る。
+    // 処理完了待ち → 公開を threads_video_finalize へのポーリングで行う。
+    if (res.status === 202) {
+      const { creation_id } = await res.json();
+      return await finalizeThreadsVideo(text, videoUrl, creation_id);
+    }
+
+    return false;
   } catch (error) {
     console.error(`postToThreads -> error:`, error);
     return false;
   }
+};
+
+// threads_post が 202（動画コンテナ処理中）を返した場合の最終化ポーリング。
+// コンテナが FINISHED になるまで threads_video_finalize を呼び続け、公開が完了したら true を返す。
+const finalizeThreadsVideo = async (text: string, videoUrl: string | null, creation_id: string): Promise<boolean> => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const FINALIZE_POLL_MAX_ATTEMPTS = 20; // 3 秒間隔で最大 60 秒待つ
+  const FINALIZE_POLL_INTERVAL_MS = 3000;
+
+  for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {
+    await sleep(FINALIZE_POLL_INTERVAL_MS);
+    try {
+      const res = await fetch(`${Config.API_ENDPOINT}/threads_video_finalize`, {
+        method: 'POST',
+        headers: buildAuthHeaders('application/json'),
+        body: JSON.stringify({
+          creation_id,
+          text,
+          video_url: videoUrl,
+        }),
+      });
+
+      if (res.ok) {
+        return true;
+      }
+      if (res.status === 202) {
+        // まだ処理中: 再ポーリング
+        continue;
+      }
+      console.error(`threads_video_finalize failed: ${res.status}`, await res.text());
+      return false;
+    } catch (error) {
+      console.error(`finalizeThreadsVideo -> error:`, error);
+      return false;
+    }
+  }
+
+  console.error('threads video finalize timed out');
+  return false;
 };
 
 const loadMyPostsThreads = async (): Promise<Post[]> => {
