@@ -6,6 +6,9 @@ PPPOST は、Bluesky・Threads・Misskey に一つの画面から同時投稿で
 
 - Bluesky・Threads・Misskey への同時投稿
   - Misskey は MiAuth による接続で、任意のホスト（既定値 `misskey.io`）を接続時に入力できる。アプリの事前登録・環境変数の追加は不要
+- テキスト・画像・動画の投稿
+  - 動画は 1 本のみ・MP4・100MB 以内・3 分以内（最も制限の厳しい Bluesky の仕様に合わせる）
+  - 動画を添付した場合は画像を添付できない（画像と動画の併用は不可）
 
 ## 使い方
 
@@ -125,6 +128,13 @@ openspec/changes/PPP-005-add-threads-support/  ← proposal (親)
 
 - 新しいソーシャルプラットフォーム追加  
   現時点では共通化された手順が確立されていないため、既存の Bluesky/Twitter 実装を参考に個別対応してください。
+- 動画投稿の非同期 2 段階化
+  SNS 側のメディア処理（エンコード・サムネイル生成）は数十秒かかり、Netlify 同期 Function の実行時間制限（10〜30 秒）内に完了しない。そのため、動画投稿は以下で構成される。
+  1. 投稿エンドポイントがメディアの受け付け（アップロード/コンテナ作成）を行い、処理中は HTTP 202（処理中 + ジョブ ID）を返す
+  2. フロントエンドが専用の最終化エンドポイント（`*_video_finalize`）を 3 秒間隔でポーリングし、処理完了後に公開・ノート作成を行う
+  - Bluesky: `app.bsky.video.uploadVideo`（動画サービス `video.bsky.app` へサービストークンで直接アップロード）→ `bluesky_video_finalize`（`getJobStatus` 待ち → `app.bsky.embed.video` で投稿）
+  - Threads: `media_type=VIDEO` コンテナ作成 → `threads_video_finalize`（FINISHED 待ち → 公開。`code:24 / subcode:4279009` はコンテナ再作成リトライ）
+  - Misskey: `drive/files/upload-from-url`（Misskey 側が非同期取り込み）→ `misskey_video_finalize`（`drive/files` でファイル特定 → `notes/create`）。接続時の MiAuth 権限に `read:drive` が必要
 - サーバーレス関数の基本形
 
 ```javascript
@@ -208,8 +218,10 @@ Yahoo リアルタイム検索を利用した Twitter/X のスクレイピング
 
 ## 現在の制限事項
 
-1. Misskey への投稿は未対応（検討余地あり）
-2. ローカルストレージに保存した接続情報が平文のまま保持される（暗号化未対応）
+1. 動画と画像の同時添付は不可（動画を添付した場合は動画のみ。Bluesky の API 制約に合わせ全 SNS で統一）
+2. 動画の許容上限は 100MB・3 分以内（最も制限の厳しい Bluesky の仕様に合わせる。Threads は 5 分・Misskey はサーバー設定依存でこれより緩い）
+3. 動画投稿時のリプライ・引用は不可（通常投稿のみ）
+4. ローカルストレージに保存した接続情報が平文のまま保持される（暗号化未対応）
 
 ## License
 
