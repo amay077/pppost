@@ -74,14 +74,24 @@ Bluesky・Threads・Misskey への動画投稿の仕様。動画の選択・上�
 
 ### Requirement: Bluesky への動画投稿（Post video to Bluesky）
 
-システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と自動生成の alt テキスト）を指定して投稿しなければならない (SHALL)。これらの動画エンドポイントは動画サービス（`video.bsky.app`）が提供するため、システムは PDS ではなく動画サービスに対してアップロード・状態確認を行い、アップロードには `com.atproto.server.getServiceAuth` で発行したサービス トークンを使用しなければならない (SHALL)。alt テキストは画像投稿と同様に自動生成（例: `Video`）しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。日次アップロード上限（`app.bsky.video.getUploadLimits`）超過など `uploadVideo` の失敗についても、同様にエラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
+システムは、Bluesky が投稿対象に選択され、動画が添付されているとき、バックエンドが `app.bsky.video.uploadVideo` で動画をアップロードし、`app.bsky.video.getJobStatus` で処理の完了（`JOB_STATE_COMPLETED`）を待ち、投稿レコードの `embed` に `app.bsky.embed.video`（アップロード結果の blob と自動生成の alt テキスト）を指定して投稿しなければならない (SHALL)。これらの動画エンドポイントは動画サービス（`video.bsky.app`）が提供するため、システムは PDS ではなく動画サービスに対してアップロード・状態確認を行い、アップロードには `com.atproto.server.getServiceAuth` で発行したサービス トークンを使用しなければならない (SHALL)。alt テキストは画像投稿と同様に自動生成（例: `Video`）しなければならない (SHALL)。
 
-#### Scenario: 動画を Bluesky に投稿する（Post video to Bluesky successfully）
+動画のエンコード処理は数十秒かかることがあり、1 回の同期呼び出しの実行時間予算内に完了しないことがある。その場合、システムは投稿を失敗とせず、アップロード結果のジョブ ID を HTTP 202 でクライアントへ返さなければならない (SHALL)。クライアントは別エンドポイント（`bluesky_video_finalize`）をポーリングし、バックエンドが処理完了（blob の取得）を待ってから投稿しなければならない (SHALL)。動画処理ジョブが失敗（`JOB_STATE_FAILED`）した場合、システムは投稿を行わず、その投稿を失敗として扱い、エラー一覧に `Bluesky` を含めてユーザーへ通知しなければならない (SHALL)。処理完了待ちはバックエンドの実行時間制約に収まるよう有限に制限しなければならない (SHALL)。動画が添付されている場合、システムは画像の埋め込み（`app.bsky.embed.images`）や OGP カード（`app.bsky.embed.external`）を動画と同時に指定してはならない (SHALL NOT)。
+
+#### Scenario: 動画を Bluesky に投稿する（同期完了）（Post video to Bluesky synchronously）
 
 - **GIVEN** ユーザーが Bluesky を投稿対象に選択し、本文と動画を入力している
 - **WHEN** 投稿ボタンを押下する
-- **THEN** バックエンドが動画を `app.bsky.video.uploadVideo` でアップロードする
-- **AND** ジョブが `JOB_STATE_COMPLETED` になるまで待機したのち、`app.bsky.embed.video` を `embed` に指定して投稿が完了する
+- **THEN** バックエンドが動画を動画サービス（`video.bsky.app`）へアップロードする
+- **AND** ジョブが実行時間予算内に完了し、`app.bsky.embed.video` を `embed` に指定して投稿が完了する
+
+#### Scenario: 動画処理が予算内に完了せず、ポーリング後に投稿される（Async finalize after polling）
+
+- **GIVEN** ユーザーが Bluesky を投稿対象に選択し、本文と動画を入力している
+- **AND** 動画のエンコード処理が 1 回の同期呼び出しの実行時間予算内に完了しない
+- **WHEN** 投稿ボタンを押下する
+- **THEN** バックエンドはジョブ ID を HTTP 202 で返し、投稿は失敗として扱われない
+- **AND** クライアントが `bluesky_video_finalize` をポーリングし、処理完了後に `app.bsky.embed.video` を指定して投稿が完了する
 
 #### Scenario: 動画処理ジョブが失敗する（Video job fails）
 

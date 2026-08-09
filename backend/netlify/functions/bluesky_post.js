@@ -244,6 +244,9 @@ const handler = async (event) => {
 
     // 動画処理（app.bsky.video.uploadVideo → getJobStatus ポーリング → app.bsky.embed.video）
     // 動画は画像・OGP と併用できない（フロントとサーバー側バリデーションで排他済み）
+    // 動画のエンコード処理は数十秒かかることがあり、同期 Function の実行時間制約（約 10 秒）内に
+    // 完了しないため、処理中は 202 を返してクライアントに bluesky_video_finalize での後続処理を促す。
+    let videoJobId = null;
     const embedVideo = await (async () => {
       if (video == null || video.length === 0) {
         return undefined;
@@ -294,27 +297,27 @@ const handler = async (event) => {
       }
       const uploadBody = await uploadResponse.json();
       const jobStatus = uploadBody.jobStatus ?? uploadBody;
-      console.log(`Video upload job started: ${jobStatus.jobId}`);
-
-      // 処理完了（blob の取得）をポーリングする
-      // バックエンド（Netlify 同期 Function）の実行時間制約（約 10 秒）に収めるため、
-      // 動画取得・アップロードの所要時間を考慮し、ポーリングは最大 4 回（計 4 秒）で打ち切る
-      const VIDEO_POLL_MAX_ATTEMPTS = 4;
-      const VIDEO_POLL_INTERVAL_MS = 1000;
+      const jobId = jobStatus.jobId;
+      console.log(`Video upload job started: ${jobId}`);
 
       // 状態確認は video.bsky.app に対して行う（PDS は getJobStatus を実装していない）
       const videoAgent = new BskyAgent({ service: 'https://video.bsky.app' });
 
+      // 短時間だけポーリングして完了済みなら同期で投稿する（fast path）
+      // 完了しなければ処理中（202）として扱い、bluesky_video_finalize で後続処理する
+      const FAST_POLL_MAX_ATTEMPTS = 3;
+      const FAST_POLL_INTERVAL_MS = 1000;
+
       let currentStatus = jobStatus;
       let blob = currentStatus.blob;
-      for (let i = 0; i < VIDEO_POLL_MAX_ATTEMPTS && blob == null; i++) {
+      for (let i = 0; i < FAST_POLL_MAX_ATTEMPTS && blob == null; i++) {
         const st = currentStatus.state;
         console.log(`Video job status (attempt ${i + 1}): ${st} (${currentStatus.progress ?? 0}%)`);
         if (st === 'JOB_STATE_FAILED') {
           console.error(`Video job failed: ${currentStatus.failureCode} ${currentStatus.message}`);
           return null;
         }
-        await new Promise((resolve) => setTimeout(resolve, VIDEO_POLL_INTERVAL_MS));
+        await new Promise((resolve) => setTimeout(resolve, FAST_POLL_INTERVAL_MS));
         try {
           const { data: statusData } = await videoAgent.app.bsky.video.getJobStatus({ jobId: currentStatus.jobId });
           currentStatus = statusData.jobStatus;
@@ -343,8 +346,9 @@ const handler = async (event) => {
       }
 
       if (blob == null) {
-        console.error(`Video job not completed within budget: ${currentStatus.state}`);
-        return null;
+        console.log(`Video job still processing: ${currentStatus.state}`);
+        videoJobId = jobId;
+        return { status: 'processing' };
       }
 
       return {
@@ -363,6 +367,20 @@ const handler = async (event) => {
         },
         body: JSON.stringify({ error: 'Failed to process video' })
       };
+    }
+
+    // 動画が処理中の場合は 202 を返し、クライアントに bluesky_video_finalize での後続処理を促す
+    if (video != null && embedVideo?.status === 'processing') {
+      const response = {
+        statusCode: 202,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'processing', job_id: videoJobId }),
+      };
+      console.info('bluesky video uploaded, waiting for finalize', response.body);
+      return response;
     }
 
     // OGP処理（画像・動画がない場合のみ）

@@ -40,17 +40,21 @@
 - [x] 5.6 ゴースト投稿（`is_ghost_post=true`）時は動画を無視して `media_type=TEXT` のまま投稿することを確認する
 - [x] 5.7 Threads 共通ロジック（コンテナ作成・FINISHED 待ち・公開・ゴースト）を `backend/netlify/lib/threads.js` に抽出する
 - [x] 5.8 フロントが 202 受信時に `threads_video_finalize` をポーリングし、完了後に成功とする
+- [x] 5.9 202 Accepted は `res.ok === true` になるため、フロントのステータス判定は 202 を先に確認する（本番で 202 を成功扱いするバグを修正）
 
 ## 6. Bluesky の動画投稿（バックエンド）
 
 - [x] 6.1 `@atproto/api` を動画 lexicon 対応版へアップグレードする（backend/package.json）
 - [x] 6.2 動画アップロード（`app.bsky.video.uploadVideo`）→ 処理完了待ち（`getJobStatus` ポーリング）→ `app.bsky.embed.video` での投稿を実装する
 - [x] 6.3 動画エンドポイントは PDS ではなく動画サービス（`video.bsky.app`）に対して呼び出し、アップロードは `getServiceAuth` のサービス トークンを使用する（PDS への呼び出しは 501 になるため）
-- [x] 6.4 ジョブ失敗（`JOB_STATE_FAILED`）時は投稿せず失敗を返す
-- [x] 6.5 ポーリングをバックエンドの実行時間制約内に収める（有限の試行回数・打ち切り）
-- [x] 6.6 Bluesky の再生時間制限を公式情報で確認する（結果: 3 分。アプリ全体の上限を 3 分に設定）
-- [x] 6.7 動画投稿時は OGP 埋め込みをスキップすることを確認する
-- [x] 6.8 `app.bsky.embed.video` の alt テキストを自動生成（例: `Video`）する
+- [x] 6.4 動画処理が実行時間予算内に完了しない場合、失敗とせずジョブ ID を HTTP 202 で返す（非同期最終化の導入）
+- [x] 6.5 `bluesky_video_finalize` 関数を追加し、ジョブの処理完了待ち・`app.bsky.embed.video` での投稿を行う
+- [x] 6.6 ジョブ失敗（`JOB_STATE_FAILED`）時は投稿せず失敗を返す
+- [x] 6.7 ポーリングをバックエンドの実行時間制約内に収める（有限の試行回数・打ち切り）
+- [x] 6.8 Bluesky の再生時間制限を公式情報で確認する（結果: 3 分。アプリ全体の上限を 3 分に設定）
+- [x] 6.9 動画投稿時は OGP 埋め込みをスキップすることを確認する
+- [x] 6.10 `app.bsky.embed.video` の alt テキストを自動生成（例: `Video`）する
+- [x] 6.11 フロントが 202 受信時に `bluesky_video_finalize` をポーリングし、完了後に成功とする
 
 ## 7. Misskey の動画投稿（バックエンド）
 

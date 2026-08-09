@@ -354,15 +354,16 @@ const postToThreads = async (text: string, imageUrls: string[], videoUrl: string
       }),
     });
 
-    if (res.ok) {
-      return true;
-    }
-
+    // 202 Accepted も res.ok が true になるため、ステータス判定は 202 を先に確認する
     // 動画コンテナの処理が完了していない場合は 202 + creation_id が返る。
     // 処理完了待ち → 公開を threads_video_finalize へのポーリングで行う。
     if (res.status === 202) {
       const { creation_id } = await res.json();
       return await finalizeThreadsVideo(text, videoUrl, creation_id);
+    }
+
+    if (res.ok) {
+      return true;
     }
 
     return false;
@@ -392,12 +393,13 @@ const finalizeThreadsVideo = async (text: string, videoUrl: string | null, creat
         }),
       });
 
-      if (res.ok) {
-        return true;
-      }
+      // 202 Accepted も res.ok が true になるため、ステータス判定は 202 を先に確認する
       if (res.status === 202) {
         // まだ処理中: 再ポーリング
         continue;
+      }
+      if (res.ok) {
+        return true;
       }
       console.error(`threads_video_finalize failed: ${res.status}`, await res.text());
       return false;
@@ -467,6 +469,14 @@ const postToBluesky = async (text: string, imageUrls: string[], videoUrl: string
       }),
     });
 
+    // 202 Accepted も res.ok が true になるため、ステータス判定は 202 を先に確認する
+    // 動画のエンコード処理中は 202 + job_id が返る。処理完了待ち → 投稿を
+    // bluesky_video_finalize へのポーリングで行う。
+    if (res.status === 202) {
+      const { job_id } = await res.json();
+      return await finalizeBlueskyVideo(text, job_id);
+    }
+
     if (res.ok) {
       const resJson = await res.json();
       console.log(`postToBluesky response:`, resJson);
@@ -480,6 +490,45 @@ const postToBluesky = async (text: string, imageUrls: string[], videoUrl: string
     console.error(`postToBluesky -> error:`, error);
     return false;
   }
+};
+
+// bluesky_post が 202（動画エンコード処理中）を返した場合の最終化ポーリング。
+// 処理完了後に bluesky_video_finalize が投稿し、200 が返ったら true。
+const finalizeBlueskyVideo = async (text: string, job_id: string): Promise<boolean> => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const FINALIZE_POLL_MAX_ATTEMPTS = 20; // 3 秒間隔で最大 60 秒待つ
+  const FINALIZE_POLL_INTERVAL_MS = 3000;
+
+  for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {
+    await sleep(FINALIZE_POLL_INTERVAL_MS);
+    try {
+      const res = await fetch(`${Config.API_ENDPOINT}/bluesky_video_finalize`, {
+        method: 'POST',
+        headers: buildAuthHeaders('application/json'),
+        body: JSON.stringify({
+          job_id,
+          text,
+        }),
+      });
+
+      // 202 Accepted も res.ok が true になるため、ステータス判定は 202 を先に確認する
+      if (res.status === 202) {
+        // まだ処理中: 再ポーリング
+        continue;
+      }
+      if (res.ok) {
+        return true;
+      }
+      console.error(`bluesky_video_finalize failed: ${res.status}`, await res.text());
+      return false;
+    } catch (error) {
+      console.error(`finalizeBlueskyVideo -> error:`, error);
+      return false;
+    }
+  }
+
+  console.error('bluesky video finalize timed out');
+  return false;
 };
 
 
