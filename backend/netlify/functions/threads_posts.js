@@ -31,16 +31,33 @@ const handler = async (event) => {
     const token = stored.token.access_token;
 
     // 自分の投稿一覧を取得（reply 元候補）
-    const url = `${THREADS_API_BASE}/me/threads?fields=id,text,permalink,timestamp&limit=25&access_token=${encodeURIComponent(token)}`;
-    const res = await fetch(url);
+    // Threads API はトップレベル投稿（GET /me/threads）と返信（GET /me/replies）を別エンドポイントで返すため、
+    // 両方を取得してマージする。返信を取得しないと、返信として投稿した内容が候補から欠落する（Issue #39）。
+    const FETCH_ITEMS = [
+      { label: 'threads', url: `${THREADS_API_BASE}/me/threads?fields=id,text,permalink,timestamp&limit=25&access_token=${encodeURIComponent(token)}` },
+      { label: 'replies', url: `${THREADS_API_BASE}/me/replies?fields=id,text,permalink,timestamp&limit=25&access_token=${encodeURIComponent(token)}` },
+    ];
 
-    if (!res.ok) {
-      console.error(`threads posts fetch failed: ${res.status}`, await res.text());
-      return { statusCode: res.status, body: 'failed to fetch threads posts' };
+    // 片方の取得に失敗しても他方の結果を返すため、部分成功を許容して取得する
+    const settled = await Promise.all(
+      FETCH_ITEMS.map(async ({ label, url }) => {
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.error(`threads ${label} fetch failed: ${res.status}`, await res.text());
+          return { ok: false, posts: [] };
+        }
+        const json = await res.json();
+        return { ok: true, posts: Array.isArray(json.data) ? json.data : [] };
+      })
+    );
+
+    if (settled.every((s) => s.ok === false)) {
+      console.error('threads posts and replies fetch both failed');
+      return { statusCode: 500, body: 'failed to fetch threads posts' };
     }
 
-    const json = await res.json();
-    const posts = Array.isArray(json.data) ? json.data : [];
+    // トップレベル投稿と返信は API の仕様上重複しないが、万一の重複に備えて id で除去する
+    const posts = [...new Map(settled.flatMap((s) => s.posts).map((p) => [p.id, p])).values()];
 
     const results = posts.map((p) => ({
       id: p.id,
