@@ -10,13 +10,14 @@
 - 取得フィールドは既存と同じ `id,text,permalink,timestamp` とし、`limit=25` を維持する
 - いずれか一方の取得が失敗した場合は、成功した側の結果のみを返す（両方失敗した場合のみエラー）
 - 万一の重複に備え、投稿 `id` による重複除去を行う
-- フロントエンドの変更は不要（`loadMyPostsThreads` は配列をそのまま消費し、グループ化・ソートは既存ロジックのまま）
+- `GET /me/replies` には Threads API の `threads_read_replies` スコープが必要なため、OAuth 認可スコープ（`frontend/src/lib/ThreadsConnection.svelte`）に追加する。**既存の接続トークンには新スコープが付与されないため、再接続（再認可）が必要**
+- フロントエンドの変更は認可スコープの 1 行のみ（`loadMyPostsThreads` は配列をそのまま消費し、グループ化・ソートは既存ロジックのまま）
 
 ## Impact
 
-- **Affected specs**: `threads-posting`（MODIFIED: Threads の自投稿取得）
-- **Affected code**: `backend/netlify/functions/threads_posts.js`
-- **Breaking changes**: なし
+- **Affected specs**: `threads-posting`（MODIFIED: Threads アカウント接続 / Threads の自投稿取得）
+- **Affected code**: `backend/netlify/functions/threads_posts.js`、`frontend/src/lib/ThreadsConnection.svelte`（認可スコープ）
+- **Breaking changes**: なし（ただし既存トークンでは `threads_read_replies` が無効なため、機能確認には Threads の再接続が必要）
 
 ## References
 

@@ -42,11 +42,14 @@ const handler = async (event) => {
     const settled = await Promise.all(
       FETCH_ITEMS.map(async ({ label, url }) => {
         const res = await fetch(url);
+        const bodyText = await res.text();
         if (!res.ok) {
-          console.error(`threads ${label} fetch failed: ${res.status}`, await res.text());
+          console.error(`threads ${label} fetch failed: ${res.status}`, bodyText);
           return { ok: false, posts: [] };
         }
-        const json = await res.json();
+        // デバッグ用: 取得成功時もステータスと件数、先頭の投稿をログに残す（本文はトークンを含まない）
+        console.info(`threads ${label} fetch succeeded: ${res.status}`, bodyText.slice(0, 500));
+        const json = JSON.parse(bodyText);
         return { ok: true, posts: Array.isArray(json.data) ? json.data : [] };
       })
     );
@@ -58,6 +61,7 @@ const handler = async (event) => {
 
     // トップレベル投稿と返信は API の仕様上重複しないが、万一の重複に備えて id で除去する
     const posts = [...new Map(settled.flatMap((s) => s.posts).map((p) => [p.id, p])).values()];
+    console.info(`threads posts merged: ${posts.length} posts (${settled.map((s) => `${s.posts.length}`).join('+')})`);
 
     const results = posts.map((p) => ({
       id: p.id,
