@@ -20,7 +20,8 @@ let spaUpdateAvailable = false;
 let myPosts: PresentedPost[] =[];
 
 let loading = true;
-let loadingMyPosts = false;
+let loadingReplyPosts = false;
+let loadingQuotePosts = false;
 let posting = false;
 let posted = false;
 
@@ -655,6 +656,14 @@ const onChangePostSettings = () => {
   });
 };
 
+const onTogglePostTo = (evt: Event, type: SettingType) => {
+  const setting = postSettings[type];
+  if (setting != null) {
+    setting.enabled = (evt.target as HTMLInputElement).checked;
+    savePostSetting(setting);
+  }
+};
+
 const onVersion = async () => { 
   apiVer = await getApiVersion();
   const spaVer = await getSpaVersion();
@@ -684,13 +693,20 @@ const onUpdateSpa = async () => {
   location.reload();
 }
 
-const onLoadMyPosts = async () => {
+const onLoadMyPosts = async (section: 'reply' | 'quote') => {
+  const setLoading = (v: boolean) => {
+    if (section == 'reply') {
+      loadingReplyPosts = v;
+    } else {
+      loadingQuotePosts = v;
+    }
+  };
+  setLoading(true);
   myPosts = [];
-  loadingMyPosts = true;
   try {
     myPosts = await loadMyPosts();
   } finally {
-    loadingMyPosts = false;
+    setLoading(false);
   }
 }
 
@@ -708,19 +724,19 @@ const getTypes = (post: PresentedPost) => {
 
 <div class="d-flex flex-column gap-2">
   <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
-    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.bluesky} id="bluesky" disabled={postSettings.bluesky == null}>
+    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.bluesky} id="bluesky" disabled={postSettings.bluesky == null} on:change={(e) => onTogglePostTo(e, 'bluesky')}>
     <div class="w-100">
       <BlueskyConnection on:onChange={onChangePostSettings} />
     </div>
   </div>
   <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
-    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.threads} id="threads" disabled={postSettings.threads == null}>
+    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.threads} id="threads" disabled={postSettings.threads == null} on:change={(e) => onTogglePostTo(e, 'threads')}>
     <div class="w-100">
       <ThreadsConnection on:onChange={onChangePostSettings} />
     </div>
   </div>
   <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
-    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.misskey} id="misskey" disabled={postSettings.misskey == null}>
+    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.misskey} id="misskey" disabled={postSettings.misskey == null} on:change={(e) => onTogglePostTo(e, 'misskey')}>
     <div class="w-100">
       <MisskeyConnection on:onChange={onChangePostSettings} />
     </div>
@@ -823,8 +839,8 @@ const getTypes = (post: PresentedPost) => {
   <div class="d-flex flex-row align-items-center gap-1" style="cursor: pointer;"  on:click={async () => {
     expandedReply = !expandedReply;
     // Reply展開時に毎回投稿を再読み込み（洗い替え）
-    if (expandedReply && !loadingMyPosts) {
-      await onLoadMyPosts();
+    if (expandedReply && !loadingReplyPosts) {
+      await onLoadMyPosts('reply');
     }
   }}>
   
@@ -839,7 +855,7 @@ const getTypes = (post: PresentedPost) => {
       <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
     </svg>
     {/if}
-    {#if loadingMyPosts}
+    {#if loadingReplyPosts}
     <div class="spinner-border spinner-border-sm" role="status">
       <span class="visually-hidden">Loading...</span>
     </div>
@@ -867,8 +883,8 @@ const getTypes = (post: PresentedPost) => {
   <div class="d-flex flex-row align-items-center gap-1" style="cursor: pointer;"  on:click={async () => {
     expandedQuote = !expandedQuote;
     // Quote展開時に毎回投稿を再読み込み（洗い替え）
-    if (expandedQuote && !loadingMyPosts) {
-      await onLoadMyPosts();
+    if (expandedQuote && !loadingQuotePosts) {
+      await onLoadMyPosts('quote');
     }
   }}>
   
@@ -883,7 +899,7 @@ const getTypes = (post: PresentedPost) => {
       <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
     </svg>
     {/if}
-    {#if loadingMyPosts}
+    {#if loadingQuotePosts}
     <div class="spinner-border spinner-border-sm" role="status">
       <span class="visually-hidden">Loading...</span>
     </div>
