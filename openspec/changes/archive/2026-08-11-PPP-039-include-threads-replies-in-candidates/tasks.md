@@ -15,5 +15,5 @@
 ## 3. 検証
 
 - [x] 3.1 `openspec validate PPP-039-include-threads-replies-in-candidates --strict` が成功する
-- [ ] 3.2 Threads を再接続（再認可）し、新スコープのトークンで `GET /me/replies` が返信を返すことを確認する（Netlify ログの `threads replies fetch succeeded`）
-- [ ] 3.3 実機で、返信として投稿した Threads 投稿がリプライ元候補に表示され、同一内容の Bluesky・Misskey 投稿と同じグループにまとまることを確認する（Issue #39 の再発防止確認）
+- [x] 3.2 Threads を再接続（再認可）し、新スコープのトークンで `GET /me/replies` が返信を返すことを確認する（Netlify ログの `threads replies fetch succeeded`）
+- [x] 3.3 実機で、返信として投稿した Threads 投稿がリプライ元候補に表示され、同一内容の Bluesky・Misskey 投稿と同じグループにまとまることを確認する（Issue #39 の再発防止確認）
