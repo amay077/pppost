@@ -19,7 +19,8 @@ let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' 
 let spaUpdateAvailable = false;
 let myPosts: PresentedPost[] =[];
 
-let loading = true;
+let isProcessingText = false;
+let isRefreshingSession = false;
 let loadingReplyPosts = false;
 let loadingQuotePosts = false;
 let posting = false;
@@ -227,7 +228,7 @@ const TWITTER_WARN_LENGTH = 140; // 現在のTwitterの文字数上限（警告�
 const scrapeSwarmCheckin = async (swarmUrl: string): Promise<boolean> => {
   let handled = false;
   try {
-    loading = true;
+    isProcessingText = true;
     const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
     
     // GETリクエストに変更（よりRESTfulで適切）
@@ -249,7 +250,7 @@ const scrapeSwarmCheckin = async (swarmUrl: string): Promise<boolean> => {
   } catch (error) {
     console.error('Error scraping Swarm URL:', error);
   } finally {
-    loading = false;
+    isProcessingText = false;
   }
 
   return handled;
@@ -301,7 +302,7 @@ const fetchTitleForUrl = async (targetUrl: string): Promise<string | null> => {
   const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
 
   try {
-    loading = true;
+    isProcessingText = true;
     const response = await fetch(`${apiUrl}/fetch_title?url=${encodeURIComponent(targetUrl)}`);
 
     if (!response.ok) {
@@ -320,7 +321,7 @@ const fetchTitleForUrl = async (targetUrl: string): Promise<string | null> => {
   } catch (error) {
     console.error('Error fetching title for URL:', error);
   } finally {
-    loading = false;
+    isProcessingText = false;
   }
 
   return null;
@@ -374,7 +375,7 @@ const fetchYouTubeTitle = async (targetUrl: string): Promise<string | null> => {
   const apiUrl = import.meta.env.VITE_API_ENDPOINT || '';
 
   try {
-    loading = true;
+    isProcessingText = true;
     const response = await fetch(`${apiUrl}/youtube_oembed?url=${encodeURIComponent(targetUrl)}`);
 
     if (!response.ok) {
@@ -393,7 +394,7 @@ const fetchYouTubeTitle = async (targetUrl: string): Promise<string | null> => {
   } catch (error) {
     console.error('Error fetching YouTube title:', error);
   } finally {
-    loading = false;
+    isProcessingText = false;
   }
 
   return null;
@@ -403,59 +404,66 @@ onMount(async () => {
   console.log(`onMount`);
 
   try {
+    try {
+      isRefreshingSession = true;
 
-    // const url = new URL(window.location.href);
-    // const params = new URLSearchParams(url.search);
-    // if (params.get('state') == 'twitter_callback' && params.has('code')) {
-    //   await connectToTwitter(params);
-    // }
+      // const url = new URL(window.location.href);
+      // const params = new URLSearchParams(url.search);
+      // if (params.get('state') == 'twitter_callback' && params.has('code')) {
+      //   await connectToTwitter(params);
+      // }
+
+      const urlParams = new URLSearchParams(window.location.search);
+
+      // Threads OAuth コールバック処理
+      if (urlParams.get('state') === 'threads_callback' && urlParams.has('code')) {
+        const code = urlParams.get('code') ?? '';
+        // 既存セッションがあれば再利用する（トークンはサーバー保管、返るのは session_id とメタのみ）
+        const existingSessionId = loadSessionId();
+        const headers: Record<string, string> = {};
+        if (existingSessionId != null) {
+          headers['Authorization'] = `Bearer ${existingSessionId}`;
+        }
+        const res = await fetch(`${Config.API_ENDPOINT}/threads_token?code=${encodeURIComponent(code)}`, { headers });
+        if (res.ok) {
+          const resJson = await res.json();
+          saveSessionId(resJson.session_id);
+          savePostSetting({
+            type: 'threads',
+            title: 'Threads',
+            enabled: true,
+            user_id: resJson.user_id,
+          });
+          onChangePostSettings();
+        } else {
+          console.error(`failed to exchange threads token:`, res);
+        }
+
+        // URL から code を除去する
+        history.replaceState(null, '', window.location.pathname);
+      }
+
+      // Threads 長命トークンの自動リフレッシュ
+      // リフレッシュ可否の判定・実行はサーバー側で行うため、接続済みならサーバーへ問い合わせるだけとする
+      const threadsSetting = loadPostSetting('threads');
+      const sessionId = loadSessionId();
+      if (threadsSetting != null && sessionId != null) {
+        try {
+          const refreshRes = await fetch(`${Config.API_ENDPOINT}/threads_refresh`, {
+            headers: { 'Authorization': `Bearer ${sessionId}` },
+          });
+          if (!refreshRes.ok) {
+            console.error(`failed to refresh threads token:`, refreshRes);
+          }
+        } catch (error) {
+          console.error(`failed to refresh threads token:`, error);
+        }
+      }
+    } finally {
+      isRefreshingSession = false;
+    }
 
     const urlParams = new URLSearchParams(window.location.search);
-
-    // Threads OAuth コールバック処理
-    if (urlParams.get('state') === 'threads_callback' && urlParams.has('code')) {
-      const code = urlParams.get('code') ?? '';
-      // 既存セッションがあれば再利用する（トークンはサーバー保管、返るのは session_id とメタのみ）
-      const existingSessionId = loadSessionId();
-      const headers: Record<string, string> = {};
-      if (existingSessionId != null) {
-        headers['Authorization'] = `Bearer ${existingSessionId}`;
-      }
-      const res = await fetch(`${Config.API_ENDPOINT}/threads_token?code=${encodeURIComponent(code)}`, { headers });
-      if (res.ok) {
-        const resJson = await res.json();
-        saveSessionId(resJson.session_id);
-        savePostSetting({
-          type: 'threads',
-          title: 'Threads',
-          enabled: true,
-          user_id: resJson.user_id,
-        });
-        onChangePostSettings();
-      } else {
-        console.error(`failed to exchange threads token:`, res);
-      }
-
-      // URL から code を除去する
-      history.replaceState(null, '', window.location.pathname);
-    }
-
-    // Threads 長命トークンの自動リフレッシュ
-    // リフレッシュ可否の判定・実行はサーバー側で行うため、接続済みならサーバーへ問い合わせるだけとする
-    const threadsSetting = loadPostSetting('threads');
-    const sessionId = loadSessionId();
-    if (threadsSetting != null && sessionId != null) {
-      try {
-        const refreshRes = await fetch(`${Config.API_ENDPOINT}/threads_refresh`, {
-          headers: { 'Authorization': `Bearer ${sessionId}` },
-        });
-        if (!refreshRes.ok) {
-          console.error(`failed to refresh threads token:`, refreshRes);
-        }
-      } catch (error) {
-        console.error(`failed to refresh threads token:`, error);
-      }
-    }
 
     const content = urlParams.get('text');
     const url = urlParams.get('url');
@@ -506,9 +514,8 @@ onMount(async () => {
         }
       }
     }
-
-  } finally {
-    loading = false;
+  } catch (error) {
+    console.error(`onMount -> error:`, error);
   }
 });    
 
@@ -718,10 +725,6 @@ const getTypes = (post: PresentedPost) => {
 
 </script>
 
-{#if loading}
-<span class="loading">loading..</span>
-{:else}
-
 <div class="d-flex flex-column gap-2">
   <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
     <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.bluesky} id="bluesky" disabled={postSettings.bluesky == null} on:change={(e) => onTogglePostTo(e, 'bluesky')}>
@@ -747,7 +750,14 @@ const getTypes = (post: PresentedPost) => {
 
   <div class="mb-3 drop-zone {isDragOver ? 'drop-zone-active' : ''}" on:dragover={handleDragOver} on:dragleave={handleDragLeave} on:drop={handleDrop}>
     <div class="d-flex justify-content-between align-items-center"> <!-- Message ラベルと文字数を両端に配置 -->
-      <span class="h5">Message:</span>
+      <span class="d-flex align-items-center gap-2">
+        <span class="h5">Message:</span>
+        {#if isProcessingText}
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        {/if}
+      </span>
       <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
         {tweetLength} / {TWITTER_WARN_LENGTH} 文字
       </span>
@@ -758,12 +768,12 @@ const getTypes = (post: PresentedPost) => {
       rows="5" 
       bind:value={text} 
       on:change={() => onTextChange()}
-      disabled={posting}
+      disabled={isProcessingText || posting}
     ></textarea>
   </div>
   <div class="d-flex justify-content-between align-items-center"> <!-- ボタンと文字数を横並びにするための div -->
     <div class="d-flex flex-row gap-2"> <!-- ボタンを左寄せするための div -->
-    <button class="btn btn-primary" on:click="{() => post()}" disabled={posting || posted || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
+    <button class="btn btn-primary" on:click="{() => post()}" disabled={isProcessingText || isRefreshingSession || posting || posted || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
 
     {#if posting}
     <div class="spinner-border spinner-border-sm" role="status">
@@ -787,7 +797,7 @@ const getTypes = (post: PresentedPost) => {
 
   </button>
 
-  <button class="btn btn-primary-outline" on:click={clearPostContent} disabled={text.length <= 0 && images.length <= 0 && videoFile == null}>
+  <button class="btn btn-primary-outline" on:click={clearPostContent} disabled={isProcessingText || (text.length <= 0 && images.length <= 0 && videoFile == null)}>
     Clear
     </button>
 
@@ -960,8 +970,6 @@ const getTypes = (post: PresentedPost) => {
   {/if}
 
 </div>
-
-{/if}
 
 <div class="mt-4 d-flex flex-column align-items-end" style="font-size: 90%;">
   <button class="btn btn-sm btn-block btn-link"
