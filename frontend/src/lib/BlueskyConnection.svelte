@@ -10,10 +10,12 @@
   let postSettings = loadPostSetting('bluesky');
   let user = postSettings?.handle ?? '';
   let password = '';
+  let isBusy = false;
 
   const onApplyBSkySettings = async () => {
     console.log(`onApplyBSkySettings -> user:`, user);
 
+    isBusy = true;
     try {
       // 既存セッションがあれば再利用する（session データはサーバー保管、返るのは session_id とメタのみ）
       const existingSessionId = loadSessionId();
@@ -47,25 +49,32 @@
     } catch (error) {
       console.error(`onApplyBSkySettings -> error:`, error);
       alert('Bluesky に接続できませんでした。');
+    } finally {
+      isBusy = false;
     }
   };
 
   const onDisconnect = async () => {
-    const sessionId = loadSessionId();
-    if (sessionId != null) {
-      try {
-        await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId}` },
-          body: JSON.stringify({ sns_type: 'bluesky' }),
-        });
-      } catch (error) {
-        console.error(`onDisconnect -> error:`, error);
+    isBusy = true;
+    try {
+      const sessionId = loadSessionId();
+      if (sessionId != null) {
+        try {
+          await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId}` },
+            body: JSON.stringify({ sns_type: 'bluesky' }),
+          });
+        } catch (error) {
+          console.error(`onDisconnect -> error:`, error);
+        }
       }
+      postSettings = null;
+      deletePostSetting('bluesky');
+      dispatch('onChange');
+    } finally {
+      isBusy = false;
     }
-    postSettings = null;
-    deletePostSetting('bluesky');
-    dispatch('onChange');
   };
 </script>
 
@@ -90,7 +99,15 @@
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
       <span>接続済み</span>
-      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect}>切断</button>
+      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect} disabled={isBusy}>
+        {#if isBusy}
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        {:else}
+        切断
+        {/if}
+      </button>
     </div>
     {:else}
     <div class="d-flex flex-column gap-1">
@@ -101,7 +118,15 @@
         </div>
         <div class="d-flex flex-row gap-1">
           <input class="form-control form-control-sm" type="password" placeholder="App Password" bind:value={password}>
-          <button class="btn btn-sm btn-primary" disabled={user?.length <= 0 || password?.length <= 0} style="width: 60px;" on:click={onApplyBSkySettings}>接続</button>
+          <button class="btn btn-sm btn-primary" disabled={isBusy || user?.length <= 0 || password?.length <= 0} style="width: 60px;" on:click={onApplyBSkySettings}>
+            {#if isBusy}
+            <div class="spinner-border spinner-border-sm" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            {:else}
+            接続
+            {/if}
+          </button>
         </div>
       </div>
     </div>

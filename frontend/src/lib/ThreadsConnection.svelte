@@ -10,6 +10,7 @@
   const threadsTarget = Config.post_targets.threads;
 
   let postSettings = loadPostSetting('threads');
+  let isBusy = false;
 
   // PR ゴースト投稿設定（500 文字制限）
   const PR_TEXT_MAX = 500;
@@ -80,21 +81,26 @@
   };
 
   const onDisconnect = async () => {
-    const sessionId = loadSessionId();
-    if (sessionId != null) {
-      try {
-        await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ sns_type: 'threads' }),
-        });
-      } catch (error) {
-        console.error(`onDisconnect -> error:`, error);
+    isBusy = true;
+    try {
+      const sessionId = loadSessionId();
+      if (sessionId != null) {
+        try {
+          await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ sns_type: 'threads' }),
+          });
+        } catch (error) {
+          console.error(`onDisconnect -> error:`, error);
+        }
       }
+      postSettings = null;
+      deletePostSetting('threads');
+      dispatch('onChange');
+    } finally {
+      isBusy = false;
     }
-    postSettings = null;
-    deletePostSetting('threads');
-    dispatch('onChange');
   };
 
   const onConnectToThreads = () => {
@@ -136,7 +142,15 @@
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
       <span>接続済み</span>
-      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect}>切断</button>
+      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect} disabled={isBusy}>
+        {#if isBusy}
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        {:else}
+        切断
+        {/if}
+      </button>
     </div>
 
     <!-- PR ゴースト投稿設定（Threads 接続時のみ表示） -->

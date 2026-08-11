@@ -21,6 +21,7 @@ let myPosts: PresentedPost[] =[];
 
 let isProcessingText = false;
 let isRefreshingSession = false;
+let loadingVersion = false;
 let loadingReplyPosts = false;
 let loadingQuotePosts = false;
 let posting = false;
@@ -672,9 +673,16 @@ const onTogglePostTo = (evt: Event, type: SettingType) => {
 };
 
 const onVersion = async () => { 
-  apiVer = await getApiVersion();
-  const spaVer = await getSpaVersion();
-  spaUpdateAvailable = built_at.length > 0 && spaVer != null && spaVer.built_at > built_at;
+  loadingVersion = true;
+  try {
+    apiVer = await getApiVersion();
+    const spaVer = await getSpaVersion();
+    spaUpdateAvailable = built_at.length > 0 && spaVer != null && spaVer.built_at > built_at;
+  } catch (error) {
+    console.error('onVersion -> error:', error);
+  } finally {
+    loadingVersion = false;
+  }
 }
 
 const onUpdateSpa = async () => {
@@ -974,12 +982,15 @@ const getTypes = (post: PresentedPost) => {
 <div class="mt-4 d-flex flex-column align-items-end" style="font-size: 90%;">
   <button class="btn btn-sm btn-block btn-link"
     on:click={onVersion}
-  >version</button>
+    disabled={loadingVersion}
+  >{loadingVersion ? 'loading...' : 'version'}</button>
   {#if apiVer.env_ver?.length > 0}
-  <span>spa_build: {built_at}</span>
-  {#if spaUpdateAvailable}
-  <button class="btn btn-sm btn-link" on:click={onUpdateSpa}>更新</button>
-  {/if}
+  <div class="d-flex flex-row align-items-center gap-1">
+    <span>spa_build: {built_at}</span>
+    {#if spaUpdateAvailable}
+    <button class="btn btn-sm btn-link p-0" on:click={onUpdateSpa}>更新</button>
+    {/if}
+  </div>
   <span>api_build: {apiVer.build_at}</span>
   <span>api_ver: {apiVer.env_ver}</span>
   {/if}

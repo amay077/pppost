@@ -12,6 +12,7 @@
   let miauthSession = '';
 
   let postSettings = loadPostSetting('misskey');
+  let isBusy = false;
 
   const onConnectToMisskey = () => {
     if ((misskeyHost?.length ?? 0) <= 0) {
@@ -37,47 +38,60 @@
       return;
     }
 
-    // 既存セッションがあれば再利用する（トークンはサーバー保管、返るのは session_id とメタのみ）
-    const existingSessionId = loadSessionId();
-    const headers: Record<string, string> = {};
-    if (existingSessionId != null) {
-      headers['Authorization'] = `Bearer ${existingSessionId}`;
-    }
+    isBusy = true;
+    try {
+      // 既存セッションがあれば再利用する（トークンはサーバー保管、返るのは session_id とメタのみ）
+      const existingSessionId = loadSessionId();
+      const headers: Record<string, string> = {};
+      if (existingSessionId != null) {
+        headers['Authorization'] = `Bearer ${existingSessionId}`;
+      }
 
-    const res = await fetch(`${Config.API_ENDPOINT}/misskey_token?host=${encodeURIComponent(misskeyHost)}&session=${encodeURIComponent(miauthSession)}`, { headers });
+      const res = await fetch(`${Config.API_ENDPOINT}/misskey_token?host=${encodeURIComponent(misskeyHost)}&session=${encodeURIComponent(miauthSession)}`, { headers });
 
-    if (!res.ok) {
-      console.error(`failed to fetch:`, res);
+      if (!res.ok) {
+        console.error(`failed to fetch:`, res);
+        alert('Misskey への接続に失敗しました。Misskey の認証ページで許可を済ませてから、もう一度お試しください。');
+        return;
+      }
+
+      const resJson = await res.json();
+      saveSessionId(resJson.session_id);
+      postSettings = { type: 'misskey', title: 'Misskey', enabled: true, host: resJson.host, username: resJson.username };
+      savePostSetting(postSettings);
+      miauthSession = '';
+      dispatch('onChange');
+
+      alert('Misskey に接続しました。');
+    } catch (error) {
+      console.error(`onApplyMisskeyAccessToken -> error:`, error);
       alert('Misskey への接続に失敗しました。Misskey の認証ページで許可を済ませてから、もう一度お試しください。');
-      return;
+    } finally {
+      isBusy = false;
     }
-
-    const resJson = await res.json();
-    saveSessionId(resJson.session_id);
-    postSettings = { type: 'misskey', title: 'Misskey', enabled: true, host: resJson.host, username: resJson.username };
-    savePostSetting(postSettings);
-    miauthSession = '';
-    dispatch('onChange');
-
-    alert('Misskey に接続しました。');
   };
 
   const onDisconnect = async () => {
-    const sessionId = loadSessionId();
-    if (sessionId != null) {
-      try {
-        await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId}` },
-          body: JSON.stringify({ sns_type: 'misskey' }),
-        });
-      } catch (error) {
-        console.error(`onDisconnect -> error:`, error);
+    isBusy = true;
+    try {
+      const sessionId = loadSessionId();
+      if (sessionId != null) {
+        try {
+          await fetch(`${Config.API_ENDPOINT}/sns_disconnect`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId}` },
+            body: JSON.stringify({ sns_type: 'misskey' }),
+          });
+        } catch (error) {
+          console.error(`onDisconnect -> error:`, error);
+        }
       }
+      postSettings = null;
+      deletePostSetting('misskey');
+      dispatch('onChange');
+    } finally {
+      isBusy = false;
     }
-    postSettings = null;
-    deletePostSetting('misskey');
-    dispatch('onChange');
   };
 </script>
 
@@ -105,7 +119,15 @@
     {#if postSettings != null}
     <div class="d-flex flex-row gap-2 align-items-center">
       <span>接続済み ({postSettings.username}@{postSettings.host})</span>
-      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect}>切断</button>
+      <button class="btn btn-sm btn-outline-primary" style="width: 60px;" on:click={onDisconnect} disabled={isBusy}>
+        {#if isBusy}
+        <div class="spinner-border spinner-border-sm" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        {:else}
+        切断
+        {/if}
+      </button>
     </div>
     {:else}
     <div class="d-flex flex-column gap-1">
@@ -119,7 +141,15 @@
       <div class="d-flex flex-column gap-1">
         <span>2.別タブで許可した後、接続を完了</span>
         <div class="d-flex flex-row gap-1">
-          <button class="btn btn-sm btn-primary" disabled={miauthSession.length <= 0} on:click={onApplyMisskeyAccessToken}>接続を完了</button>
+          <button class="btn btn-sm btn-primary" disabled={isBusy || miauthSession.length <= 0} on:click={onApplyMisskeyAccessToken}>
+            {#if isBusy}
+            <div class="spinner-border spinner-border-sm" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            {:else}
+            接続を完了
+            {/if}
+          </button>
         </div>
       </div>
     </div>
