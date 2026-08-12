@@ -15,7 +15,7 @@ import { loadImageAsDataURL } from "./image-func";
 import dayjs from "dayjs";
 
 const built_at = (window as any)['built_at'] ?? '';
-let apiVer: { build_at: string, env_ver: string } = { build_at: '', env_ver: '' };
+let apiVer: { build_at: string } = { build_at: '' };
 let spaUpdateAvailable = false;
 let myPosts: PresentedPost[] =[];
 
@@ -984,7 +984,7 @@ const getTypes = (post: PresentedPost) => {
     on:click={onVersion}
     disabled={loadingVersion}
   >{loadingVersion ? 'loading...' : 'version'}</button>
-  {#if apiVer.env_ver?.length > 0}
+  {#if apiVer.build_at.length > 0}
   <div class="d-flex flex-row align-items-center gap-1">
     <span>spa_build: {built_at}</span>
     {#if spaUpdateAvailable}
@@ -992,7 +992,6 @@ const getTypes = (post: PresentedPost) => {
     {/if}
   </div>
   <span>api_build: {apiVer.build_at}</span>
-  <span>api_ver: {apiVer.env_ver}</span>
   {/if}
 </div>
 

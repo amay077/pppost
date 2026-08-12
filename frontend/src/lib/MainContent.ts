@@ -52,7 +52,7 @@ export const postTo: { [K in SettingType]: boolean } = {
   misskey: postSettings?.misskey?.enabled ?? false,
 };
 
-export async function getApiVersion(): Promise<{ build_at: string, env_ver: string }> {
+export async function getApiVersion(): Promise<{ build_at: string }> {
 
   const res = await fetch(`${Config.API_ENDPOINT}/ver`);
 
@@ -60,7 +60,7 @@ export async function getApiVersion(): Promise<{ build_at: string, env_ver: stri
     const data = await res.json();
     return data;
   } else {
-    return { build_at: 'unknown', env_ver: 'unknown' };
+    return { build_at: 'unknown' };
   }
 }
 
