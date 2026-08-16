@@ -69,3 +69,14 @@ export function loadMessage(): { message: string } | null {
   if ((text?.length ?? 0) <= 0 ) return null;
   return JSON.parse(text!);
 }
+
+// fetch にタイムアウトを設けるラッパー。タイムアウト時は AbortError が throw される。
+export const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs: number = 30000): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};

@@ -125,7 +125,7 @@ const handler = async (event) => {
     return response;
   } catch (error) {
     console.log(`threads_video_finalize -> error:`, error);
-    return { statusCode: 500, body: error.toString() }
+    return { statusCode: 500, body: JSON.stringify({ error: error.message }) }
   }
 };
 

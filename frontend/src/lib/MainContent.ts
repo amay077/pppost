@@ -1,5 +1,5 @@
 import { Config } from "../config";
-import { type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId } from "./func";
+import { type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId, fetchWithTimeout } from "./func";
 import dayjs from "dayjs";
 import { uploadBlobToStorage, uploadImageToStorage } from "./storage-client";
 
@@ -12,6 +12,90 @@ const buildAuthHeaders = (contentType: string): Record<string, string> => {
     headers['Authorization'] = `Bearer ${sessionId}`;
   }
   return headers;
+};
+
+// 投稿失敗の原因分類
+export type PostErrorType = 'timeout' | 'network' | 'auth' | 'server' | 'rejected';
+
+// 各 SNS への投稿結果
+export interface PostResult {
+  ok: boolean;
+  errorType?: PostErrorType;
+  message?: string;
+}
+
+// ユーザーへ表示する投稿失敗エラー（sns は表示名。全 SNS 共通の失敗では空文字）
+export interface PostError {
+  sns: string;
+  errorType: PostErrorType;
+  message: string;
+}
+
+// タイムアウト・ネットワークエラーは一時的な障害としてリトライ対象にする
+const isRetryable = (errorType: PostErrorType | undefined): boolean =>
+  errorType === 'timeout' || errorType === 'network';
+
+// HTTP ステータスコードから失敗原因を分類する
+const classifyResponse = (res: Response): PostErrorType => {
+  if (res.status === 401) return 'auth';
+  if (res.status >= 500) return 'server';
+  return 'rejected';
+};
+
+// fetch 例外（タイムアウト・ネットワークエラー）から失敗原因を分類する
+const classifyRequestError = (error: unknown): PostErrorType =>
+  error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'network';
+
+// バックエンドのエラーレスポンス（JSON { error } または平文）からメッセージを抽出する
+const extractErrorMessage = async (res: Response): Promise<string | undefined> => {
+  try {
+    const text = await res.text();
+    if (text.length == 0) return undefined;
+    try {
+      const json = JSON.parse(text);
+      if (typeof json?.error === 'string' && json.error.length > 0) return json.error;
+    } catch {
+      // JSON ではない場合は平文のまま
+    }
+    return text.length > 200 ? `${text.substring(0, 200)}...` : text;
+  } catch {
+    return undefined;
+  }
+};
+
+// 原因分類のユーザー向け既定メッセージ
+const ERROR_TYPE_MESSAGES: { [K in PostErrorType]: string } = {
+  timeout: 'タイムアウトしました',
+  network: 'ネットワークエラーが発生しました',
+  auth: '認証エラーです。接続を確認してください',
+  server: 'サーバーエラーが発生しました',
+  rejected: '投稿が拒否されました',
+};
+
+// 投稿結果をユーザー表示用のエラーへ変換する
+const buildPostError = (sns: string, result: PostResult): PostError => {
+  const errorType = result.errorType ?? 'server';
+  const base = ERROR_TYPE_MESSAGES[errorType];
+  return {
+    sns,
+    errorType,
+    message: result.message != null ? `${base}（${result.message}）` : base,
+  };
+};
+
+// 投稿 API の 1 回の呼び出し結果。202 の場合は後続の finalize ポーリングが必要。
+type PostEndpointOutcome =
+  | { status: 'success' }
+  | { status: 'finalize'; id: string }
+  | { status: 'error'; errorType: PostErrorType; message?: string };
+
+// finalize ポーリングはタイムアウト・ネットワークエラー時のみ、同一 ID（ジョブ/コンテナ/URL）で 1 回リトライする
+const withFinalizeRetry = async (fn: () => Promise<PostResult>): Promise<PostResult> => {
+  const first = await fn();
+  if (!first.ok && isRetryable(first.errorType)) {
+    return await fn();
+  }
+  return first;
 };
 
 export type Post = { text: string, url: string, posted_at: Date, id?: string };
@@ -223,8 +307,8 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
     threads: string,
     misskey: string,
   },
-}, video: File | null = null): Promise<{ errors: string[] }> => {
-  const errors: string[] = [];
+}, video: File | null = null): Promise<{ errors: PostError[] }> => {
+  const errors: PostError[] = [];
 
   // 画像を一度だけストレージ (R2) にアップロード
   const uploadedImageUrls: string[] = [];
@@ -240,7 +324,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       } else {
         // 画像アップロードに失敗した場合は投稿を中止
         console.error(`Failed to upload image ${i + 1}`);
-        return { errors: ['画像のアップロードに失敗しました'] };
+        return { errors: [{ sns: '', errorType: 'server', message: '画像のアップロードに失敗しました' }] };
       }
     }
   }
@@ -253,7 +337,7 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
     const videoUrl = await uploadBlobToStorage(video, `video_1.${ext}`);
     if (videoUrl == null) {
       console.error('Failed to upload video');
-      return { errors: ['動画のアップロードに失敗しました'] };
+      return { errors: [{ sns: '', errorType: 'server', message: '動画のアップロードに失敗しました' }] };
     }
     uploadedVideoUrl = videoUrl;
   }
@@ -265,13 +349,13 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   for (const type of enableTypes) {
     switch (type) {
     case 'bluesky':
-      promises.push(postToBluesky(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.bluesky, options?.quote_to_ids?.bluesky).then((r) => { if (!r) errors.push('Bluesky') }));
+      promises.push(postToBluesky(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.bluesky, options?.quote_to_ids?.bluesky).then((r) => { if (!r.ok) errors.push(buildPostError('Bluesky', r)) }));
       break;
     case 'threads':
-      promises.push(postToThreads(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.threads, options?.quote_to_ids?.threads).then((r) => { if (!r) errors.push('Threads') }));
+      promises.push(postToThreads(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.threads, options?.quote_to_ids?.threads).then((r) => { if (!r.ok) errors.push(buildPostError('Threads', r)) }));
       break;
     case 'misskey':
-      promises.push(postToMisskey(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.misskey, options?.quote_to_ids?.misskey).then((r) => { if (!r) errors.push('Misskey') }));
+      promises.push(postToMisskey(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.misskey, options?.quote_to_ids?.misskey).then((r) => { if (!r.ok) errors.push(buildPostError('Misskey', r)) }));
       break;
     }
 
@@ -296,10 +380,23 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 };
 
 
-const postToMisskey = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<boolean> => {
+const postToMisskey = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<PostResult> => {
+  let outcome = await postToMisskeyOnce(text, imageUrls, videoUrl, reply_to_id, quote_to_id);
+  // 投稿 API 呼び出し自体がタイムアウト・ネットワークエラーで失敗した場合のみ 1 回リトライする
+  if (outcome.status === 'error' && isRetryable(outcome.errorType)) {
+    outcome = await postToMisskeyOnce(text, imageUrls, videoUrl, reply_to_id, quote_to_id);
+  }
+  if (outcome.status === 'success') return { ok: true };
+  if (outcome.status === 'error') return { ok: false, errorType: outcome.errorType, message: outcome.message };
+  // 動画の drive 取り込み中（202）: 同一 video_url で finalize ポーリングを 1 回リトライする
+  return await withFinalizeRetry(() => finalizeMisskeyVideo(text, outcome.id));
+};
+
+// 1 回の misskey_post 呼び出し
+const postToMisskeyOnce = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<PostEndpointOutcome> => {
   try {
     // host / token はサーバーがセッションから復号して使用するため、クライアントは送らない
-    const res = await fetch(`${Config.API_ENDPOINT}/misskey_post`, {
+    const res = await fetchWithTimeout(`${Config.API_ENDPOINT}/misskey_post`, {
       method: 'POST',
       headers: buildAuthHeaders('application/json'),
       body: JSON.stringify({
@@ -316,19 +413,23 @@ const postToMisskey = async (text: string, imageUrls: string[], videoUrl: string
     // 取り込み完了 → ノート作成を misskey_video_finalize へのポーリングで行う。
     if (res.status === 202) {
       const { video_url } = await res.json();
-      return await finalizeMisskeyVideo(text, video_url);
+      return { status: 'finalize', id: video_url };
     }
 
-    return res.ok;
+    if (res.ok) return { status: 'success' };
+
+    const message = await extractErrorMessage(res);
+    console.error(`misskey_post failed: ${res.status}`, message);
+    return { status: 'error', errorType: classifyResponse(res), message };
   } catch (error) {
     console.error(`postToMisskey -> error:`, error);
-    return false;
+    return { status: 'error', errorType: classifyRequestError(error) };
   }
 };
 
 // misskey_post が 202（動画の drive 取り込み中）を返した場合の最終化ポーリング。
-// 取り込み完了後に misskey_video_finalize がノートを作成し、200 が返ったら true。
-const finalizeMisskeyVideo = async (text: string, video_url: string): Promise<boolean> => {
+// 取り込み完了後に misskey_video_finalize がノートを作成し、200 が返ったら成功。
+const finalizeMisskeyVideo = async (text: string, video_url: string): Promise<PostResult> => {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   const FINALIZE_POLL_MAX_ATTEMPTS = 30; // 3 秒間隔で最大 90 秒待つ（misskey.io の非同期取り込みの完了を待つ）
   const FINALIZE_POLL_INTERVAL_MS = 3000;
@@ -336,7 +437,7 @@ const finalizeMisskeyVideo = async (text: string, video_url: string): Promise<bo
   for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {
     await sleep(FINALIZE_POLL_INTERVAL_MS);
     try {
-      const res = await fetch(`${Config.API_ENDPOINT}/misskey_video_finalize`, {
+      const res = await fetchWithTimeout(`${Config.API_ENDPOINT}/misskey_video_finalize`, {
         method: 'POST',
         headers: buildAuthHeaders('application/json'),
         body: JSON.stringify({
@@ -351,18 +452,19 @@ const finalizeMisskeyVideo = async (text: string, video_url: string): Promise<bo
         continue;
       }
       if (res.ok) {
-        return true;
+        return { ok: true };
       }
-      console.error(`misskey_video_finalize failed: ${res.status}`, await res.text());
-      return false;
+      const message = await extractErrorMessage(res);
+      console.error(`misskey_video_finalize failed: ${res.status}`, message);
+      return { ok: false, errorType: classifyResponse(res), message };
     } catch (error) {
       console.error(`finalizeMisskeyVideo -> error:`, error);
-      return false;
+      return { ok: false, errorType: classifyRequestError(error) };
     }
   }
 
   console.error('misskey video finalize timed out');
-  return false;
+  return { ok: false, errorType: 'timeout' };
 };
 
 const loadMyPostsMisskey = async (): Promise<Post[]> => {
@@ -386,10 +488,23 @@ const loadMyPostsMisskey = async (): Promise<Post[]> => {
 };
 
 
-const postToThreads = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id?: string, quote_to_id?: string): Promise<boolean> => {
+const postToThreads = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id?: string, quote_to_id?: string): Promise<PostResult> => {
+  let outcome = await postToThreadsOnce(text, imageUrls, videoUrl, reply_to_id, quote_to_id);
+  // 投稿 API 呼び出し自体がタイムアウト・ネットワークエラーで失敗した場合のみ 1 回リトライする
+  if (outcome.status === 'error' && isRetryable(outcome.errorType)) {
+    outcome = await postToThreadsOnce(text, imageUrls, videoUrl, reply_to_id, quote_to_id);
+  }
+  if (outcome.status === 'success') return { ok: true };
+  if (outcome.status === 'error') return { ok: false, errorType: outcome.errorType, message: outcome.message };
+  // 動画コンテナ処理中（202）: 同一 creation_id で finalize ポーリングを 1 回リトライする
+  return await withFinalizeRetry(() => finalizeThreadsVideo(text, videoUrl, outcome.id));
+};
+
+// 1 回の threads_post 呼び出し
+const postToThreadsOnce = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id?: string, quote_to_id?: string): Promise<PostEndpointOutcome> => {
   try {
     // トークンはサーバーがセッションから復号して使用する
-    const res = await fetch(`${Config.API_ENDPOINT}/threads_post`, {
+    const res = await fetchWithTimeout(`${Config.API_ENDPOINT}/threads_post`, {
       method: 'POST',
       headers: buildAuthHeaders('application/json'),
       body: JSON.stringify({
@@ -406,23 +521,23 @@ const postToThreads = async (text: string, imageUrls: string[], videoUrl: string
     // 処理完了待ち → 公開を threads_video_finalize へのポーリングで行う。
     if (res.status === 202) {
       const { creation_id } = await res.json();
-      return await finalizeThreadsVideo(text, videoUrl, creation_id);
+      return { status: 'finalize', id: creation_id };
     }
 
-    if (res.ok) {
-      return true;
-    }
+    if (res.ok) return { status: 'success' };
 
-    return false;
+    const message = await extractErrorMessage(res);
+    console.error(`threads_post failed: ${res.status}`, message);
+    return { status: 'error', errorType: classifyResponse(res), message };
   } catch (error) {
     console.error(`postToThreads -> error:`, error);
-    return false;
+    return { status: 'error', errorType: classifyRequestError(error) };
   }
 };
 
 // threads_post が 202（動画コンテナ処理中）を返した場合の最終化ポーリング。
-// コンテナが FINISHED になるまで threads_video_finalize を呼び続け、公開が完了したら true を返す。
-const finalizeThreadsVideo = async (text: string, videoUrl: string | null, creation_id: string): Promise<boolean> => {
+// コンテナが FINISHED になるまで threads_video_finalize を呼び続け、公開が完了したら成功。
+const finalizeThreadsVideo = async (text: string, videoUrl: string | null, creation_id: string): Promise<PostResult> => {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   const FINALIZE_POLL_MAX_ATTEMPTS = 20; // 3 秒間隔で最大 60 秒待つ
   const FINALIZE_POLL_INTERVAL_MS = 3000;
@@ -430,7 +545,7 @@ const finalizeThreadsVideo = async (text: string, videoUrl: string | null, creat
   for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {
     await sleep(FINALIZE_POLL_INTERVAL_MS);
     try {
-      const res = await fetch(`${Config.API_ENDPOINT}/threads_video_finalize`, {
+      const res = await fetchWithTimeout(`${Config.API_ENDPOINT}/threads_video_finalize`, {
         method: 'POST',
         headers: buildAuthHeaders('application/json'),
         body: JSON.stringify({
@@ -446,18 +561,19 @@ const finalizeThreadsVideo = async (text: string, videoUrl: string | null, creat
         continue;
       }
       if (res.ok) {
-        return true;
+        return { ok: true };
       }
-      console.error(`threads_video_finalize failed: ${res.status}`, await res.text());
-      return false;
+      const message = await extractErrorMessage(res);
+      console.error(`threads_video_finalize failed: ${res.status}`, message);
+      return { ok: false, errorType: classifyResponse(res), message };
     } catch (error) {
       console.error(`finalizeThreadsVideo -> error:`, error);
-      return false;
+      return { ok: false, errorType: classifyRequestError(error) };
     }
   }
 
   console.error('threads video finalize timed out');
-  return false;
+  return { ok: false, errorType: 'timeout' };
 };
 
 const loadMyPostsThreads = async (): Promise<Post[]> => {
@@ -501,10 +617,23 @@ const loadMyPostsBluesky = async (): Promise<Post[]> => {
   }
 };
 
-const postToBluesky = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<boolean> => {
+const postToBluesky = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<PostResult> => {
+  let outcome = await postToBlueskyOnce(text, imageUrls, videoUrl, reply_to_id, quote_to_id);
+  // 投稿 API 呼び出し自体がタイムアウト・ネットワークエラーで失敗した場合のみ 1 回リトライする
+  if (outcome.status === 'error' && isRetryable(outcome.errorType)) {
+    outcome = await postToBlueskyOnce(text, imageUrls, videoUrl, reply_to_id, quote_to_id);
+  }
+  if (outcome.status === 'success') return { ok: true };
+  if (outcome.status === 'error') return { ok: false, errorType: outcome.errorType, message: outcome.message };
+  // 動画エンコード処理中（202）: 同一 job_id で finalize ポーリングを 1 回リトライする
+  return await withFinalizeRetry(() => finalizeBlueskyVideo(text, outcome.id));
+};
+
+// 1 回の bluesky_post 呼び出し
+const postToBlueskyOnce = async (text: string, imageUrls: string[], videoUrl: string | null, reply_to_id: string, quote_to_id: string): Promise<PostEndpointOutcome> => {
   try {
     // session データはサーバーがセッションから復号して使用する
-    const res = await fetch(`${Config.API_ENDPOINT}/bluesky_post`, {
+    const res = await fetchWithTimeout(`${Config.API_ENDPOINT}/bluesky_post`, {
       method: 'POST',
       headers: buildAuthHeaders('application/json'),
       body: JSON.stringify({
@@ -521,27 +650,27 @@ const postToBluesky = async (text: string, imageUrls: string[], videoUrl: string
     // bluesky_video_finalize へのポーリングで行う。
     if (res.status === 202) {
       const { job_id } = await res.json();
-      return await finalizeBlueskyVideo(text, job_id);
+      return { status: 'finalize', id: job_id };
     }
 
     if (res.ok) {
       const resJson = await res.json();
       console.log(`postToBluesky response:`, resJson);
-      return true;
-    } else {
-      const errorData = await res.json();
-      console.error('Bluesky post failed:', errorData);
-      return false;
+      return { status: 'success' };
     }
+
+    const message = await extractErrorMessage(res);
+    console.error('Bluesky post failed:', res.status, message);
+    return { status: 'error', errorType: classifyResponse(res), message };
   } catch (error) {
     console.error(`postToBluesky -> error:`, error);
-    return false;
+    return { status: 'error', errorType: classifyRequestError(error) };
   }
 };
 
 // bluesky_post が 202（動画エンコード処理中）を返した場合の最終化ポーリング。
-// 処理完了後に bluesky_video_finalize が投稿し、200 が返ったら true。
-const finalizeBlueskyVideo = async (text: string, job_id: string): Promise<boolean> => {
+// 処理完了後に bluesky_video_finalize が投稿し、200 が返ったら成功。
+const finalizeBlueskyVideo = async (text: string, job_id: string): Promise<PostResult> => {
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   const FINALIZE_POLL_MAX_ATTEMPTS = 20; // 3 秒間隔で最大 60 秒待つ
   const FINALIZE_POLL_INTERVAL_MS = 3000;
@@ -549,7 +678,7 @@ const finalizeBlueskyVideo = async (text: string, job_id: string): Promise<boole
   for (let i = 0; i < FINALIZE_POLL_MAX_ATTEMPTS; i++) {
     await sleep(FINALIZE_POLL_INTERVAL_MS);
     try {
-      const res = await fetch(`${Config.API_ENDPOINT}/bluesky_video_finalize`, {
+      const res = await fetchWithTimeout(`${Config.API_ENDPOINT}/bluesky_video_finalize`, {
         method: 'POST',
         headers: buildAuthHeaders('application/json'),
         body: JSON.stringify({
@@ -564,18 +693,19 @@ const finalizeBlueskyVideo = async (text: string, job_id: string): Promise<boole
         continue;
       }
       if (res.ok) {
-        return true;
+        return { ok: true };
       }
-      console.error(`bluesky_video_finalize failed: ${res.status}`, await res.text());
-      return false;
+      const message = await extractErrorMessage(res);
+      console.error(`bluesky_video_finalize failed: ${res.status}`, message);
+      return { ok: false, errorType: classifyResponse(res), message };
     } catch (error) {
       console.error(`finalizeBlueskyVideo -> error:`, error);
-      return false;
+      return { ok: false, errorType: classifyRequestError(error) };
     }
   }
 
   console.error('bluesky video finalize timed out');
-  return false;
+  return { ok: false, errorType: 'timeout' };
 };
 
 

@@ -88,7 +88,7 @@ const handler = async (event) => {
     return response;
   } catch (error) {
     console.log(`handler -> error:`, error);
-    return { statusCode: 500, body: error.toString() }
+    return errorResponse(500, error.message)
   }
 }
 

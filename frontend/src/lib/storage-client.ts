@@ -1,11 +1,12 @@
 import { Config } from '../config';
+import { fetchWithTimeout } from './func';
 
 // 署名付きURLを使用してファイル（画像・動画）をストレージ (Cloudflare R2) にアップロード。
 // 動画はサイズが大きいため base64 化せず、Blob のまま直接 PUT する。
 export async function uploadBlobToStorage(blob: Blob, filename: string): Promise<string | null> {
   try {
     // バックエンドから署名付きURLを取得（Content-Type はサーバーが拡張子から決定する）
-    const presignedRes = await fetch(`${Config.API_ENDPOINT}/r2_presigned_url`, {
+    const presignedRes = await fetchWithTimeout(`${Config.API_ENDPOINT}/r2_presigned_url`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -22,7 +23,7 @@ export async function uploadBlobToStorage(blob: Blob, filename: string): Promise
 
     // 署名付きURLを使用してアップロード
     // 署名生成時の ContentType と一致させる必要があるため、サーバーから受け取った contentType をそのまま使う
-    const uploadRes = await fetch(uploadUrl, {
+    const uploadRes = await fetchWithTimeout(uploadUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': contentType,
@@ -46,7 +47,7 @@ export async function uploadBlobToStorage(blob: Blob, filename: string): Promise
 export async function uploadImageToStorage(base64Data: string, filename: string = 'image.png'): Promise<string | null> {
   try {
     // バックエンドから署名付きURLを取得
-    const presignedRes = await fetch(`${Config.API_ENDPOINT}/r2_presigned_url`, {
+    const presignedRes = await fetchWithTimeout(`${Config.API_ENDPOINT}/r2_presigned_url`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -75,7 +76,7 @@ export async function uploadImageToStorage(base64Data: string, filename: string 
 
     // 署名付きURLを使用してアップロード
     // 署名生成時の ContentType と一致させる必要があるため、サーバーから受け取った contentType をそのまま使う
-    const uploadRes = await fetch(uploadUrl, {
+    const uploadRes = await fetchWithTimeout(uploadUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': contentType,

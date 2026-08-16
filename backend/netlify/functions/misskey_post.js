@@ -221,7 +221,7 @@ const handler = async (event) => {
     return response;
   } catch (error) {
     console.error(`misskey_post -> error:`, error);
-    return { statusCode: 500, headers, body: error.toString() }
+    return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) }
   }
 }
 

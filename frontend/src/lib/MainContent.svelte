@@ -9,7 +9,7 @@ import ThreadsConnection from "./ThreadsConnection.svelte";
 import MisskeyConnection from "./MisskeyConnection.svelte";
 import { loadMessage, loadPostSetting, loadSessionId, saveMessage, savePostSetting, saveSessionId, type SettingType } from "./func";
 import { Config } from "../config";
-import { getApiVersion, getSpaVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData } from "./MainContent"; // .ts 拡張子を削除
+import { getApiVersion, getSpaVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData, type PostError } from "./MainContent"; // .ts 拡張子を削除
 import ImagePreview from "./ImagePreview.svelte";
 import { loadImageAsDataURL } from "./image-func";
 import dayjs from "dayjs";
@@ -26,6 +26,7 @@ let loadingReplyPosts = false;
 let loadingQuotePosts = false;
 let posting = false;
 let posted = false;
+let postErrors: PostError[] = [];
 
 let text = loadMessage()?.message ?? '';
 // let imageDataURLs: string[] = []; // 古い形式は削除
@@ -603,6 +604,7 @@ const post = async () => {
 
   try {
     posting = true;
+    postErrors = []; // 前回のエラー表示をクリア
 
     const getPostId = (url: string | undefined) => {
       if (url == null || url.length == 0) {
@@ -644,7 +646,7 @@ const post = async () => {
       posted = true;
       alert('投稿しました。');
     } else {
-      alert(`${res.errors.join(', ')}に投稿できませんでした。`);
+      postErrors = res.errors;
     }
 
   } catch (error) {
@@ -848,6 +850,14 @@ const getTypes = (post: PresentedPost) => {
 
     </div> <!-- ボタン左寄せ div 閉じタグ -->
   </div> <!-- ボタン横並び div 閉じタグ -->
+
+  {#if postErrors.length > 0}
+  <div class="alert alert-danger mt-3 mb-0" role="alert">
+    {#each postErrors as error, i (i)}
+    <div>{error.sns.length > 0 ? `${error.sns}: ` : ''}{error.message}</div>
+    {/each}
+  </div>
+  {/if}
 
 </div>
 
