@@ -2,6 +2,8 @@
 
 macOS 上の Google Chrome にログイン済みの X アカウントを操作して、テキストを投稿するローカル API です。X の公式 API は使いません。ホスト Mac に Tailscale をインストールせず、Docker の Tailscale コンテナを tailnet の入口として公開します。
 
+別の Mac へ ZIP で配布する手順は [DEPLOY_OTHER_MAC.md](DEPLOY_OTHER_MAC.md) を参照してください。
+
 ## 構成
 
 ```text
@@ -74,7 +76,7 @@ chmod 600 .env
 `.env` を編集します。
 
 - `X_API_TOKEN`: `openssl rand -hex 32` で生成した値
-- `X_ACCOUNT`: 投稿先の X ハンドル（`@` なし）
+- `X_ACCOUNT`: 投稿先の X ハンドル（`@` なし）。Hyde を含む任意のアカウントを指定でき、特定のアカウントに固定されない
 - `TS_AUTHKEY`: Tailscale で発行した Auth Key
 - 必要に応じて `X_API_ALLOWED_ORIGINS` を変更する
 

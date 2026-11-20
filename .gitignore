@@ -32,3 +32,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 x-post-api/.x-post-api.lock
+
+# Copy packages
+*.zip
