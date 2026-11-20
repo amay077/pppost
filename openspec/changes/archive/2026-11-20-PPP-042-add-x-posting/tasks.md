@@ -60,4 +60,4 @@
 - [x] 7.2 `/usr/bin/python3 -m unittest`
 - [x] 7.3 `npm run check`
 - [x] 7.4 `openspec validate PPP-042-add-x-posting --strict`
-- [ ] 7.5 手動 E2E（ホスト Mac）
+- [x] 7.5 手動 E2E（ホスト Mac）
