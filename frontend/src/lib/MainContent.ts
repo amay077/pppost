@@ -310,6 +310,83 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
   return result;
 }
 
+type XHealthResponse = {
+  ok?: boolean,
+  account?: string,
+  chrome_tab?: boolean,
+  logged_in?: boolean,
+  composer_ready?: boolean,
+  draft_exists?: boolean,
+  busy?: boolean,
+  error?: string,
+  message?: string,
+};
+
+// X の /health 応答から、投稿を中止すべき理由を返す（問題なければ null）
+const describeXHealth = (body: XHealthResponse): string | null => {
+  if (body.error === 'NO_CHROME_TAB') return 'ホスト Mac の Chrome または X のタブがありません。';
+  if (body.error === 'NO_ACCOUNT') return '対象アカウントの X タブがありません。';
+  if (body.error === 'CHROME_PERMISSION') return body.message ?? 'Chrome の権限が不足しています。';
+  if (body.error && body.message) return body.message;
+  if (!body.chrome_tab) return 'Chrome が起動していないか、X のタブがありません。';
+  if (!body.logged_in) return '対象アカウントでログインしていません。';
+  if (!body.composer_ready) return 'X の投稿欄が見つかりません。x.com/home を開いてください。';
+  if (body.busy) return 'X が別の投稿を処理中です。しばらく待ってから再実行してください。';
+  if (body.draft_exists) return 'X の投稿欄に下書きがあります。下書きを消してから再実行してください。';
+  if (body.ok !== true) return body.message ?? 'X の接続先が投稿可能な状態ではありません。';
+  return null;
+};
+
+// X が選択されている場合の投稿前疎通確認。失敗時は全 SNS の送信を中止する。
+const preflightX = async (): Promise<PostError | null> => {
+  const setting = postSettings.x;
+  if (setting == null) {
+    return { sns: 'X', errorType: 'auth', message: 'X に接続していません。X の接続設定を確認してください。全体の投稿を中止しました。' };
+  }
+
+  const baseUrl = setting.api_base_url.trim().replace(/\/+$/, '');
+  if (baseUrl.length == 0) {
+    return { sns: 'X', errorType: 'auth', message: 'X の API URL が設定されていません。全体の投稿を中止しました。' };
+  }
+
+  try {
+    const res = await fetchWithTimeout(`${baseUrl}/health`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${setting.api_token}` },
+    }, 8000);
+
+    if (res.status === 401) {
+      return { sns: 'X', errorType: 'auth', message: 'X の API トークンが正しくありません。接続設定を確認してください。全体の投稿を中止しました。' };
+    }
+    if (!res.ok) {
+      return { sns: 'X', errorType: 'server', message: `x-post-api が HTTP ${res.status} を返しました。全体の投稿を中止しました。` };
+    }
+
+    let body: XHealthResponse | null = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    if (body == null) {
+      return { sns: 'X', errorType: 'server', message: 'x-post-api の応答を解釈できませんでした。全体の投稿を中止しました。' };
+    }
+
+    const reason = describeXHealth(body);
+    if (reason != null) {
+      return { sns: 'X', errorType: 'server', message: `${reason} 全体の投稿を中止しました。` };
+    }
+    return null;
+  } catch (error) {
+    console.error(`preflightX -> error:`, error);
+    const errorType = classifyRequestError(error);
+    const message = errorType === 'timeout'
+      ? 'X の接続先がタイムアウトしました。Tailscale 接続とホスト Mac の状態を確認してください。全体の投稿を中止しました。'
+      : 'X の接続先に到達できません。Tailscale 接続とホスト Mac の状態を確認してください。全体の投稿を中止しました。';
+    return { sns: 'X', errorType, message };
+  }
+};
+
 export const postToSns = async (text: string, imageDataURLs: string[], options: {
   reply_to_ids: {
     bluesky: string,
@@ -323,6 +400,15 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   },
 }, video: File | null = null): Promise<{ errors: PostError[] }> => {
   const errors: PostError[] = [];
+
+  // X が選択されている場合は、他 SNS へ送る前に接続先を確認する。
+  // Tailscale 未接続などで失敗したときに、他 SNS だけ投稿されるのを防ぐ。
+  if (postTo.x) {
+    const preflightError = await preflightX();
+    if (preflightError != null) {
+      return { errors: [preflightError] };
+    }
+  }
 
   // 画像を一度だけストレージ (R2) にアップロード
   const uploadedImageUrls: string[] = [];

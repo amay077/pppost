@@ -51,6 +51,47 @@
 - **WHEN** システムが結果を確定できない
 - **THEN** システムは自動で再投稿せず、「二重投稿防止のため再実行しないでください」と表示する
 
+### Requirement: X 投稿前の疎通確認（Preflight check before posting）
+
+システムは、X が投稿対象に選択されている場合、他の SNS へ投稿する前に `GET /health` で X の接続先を確認しなければならない (SHALL)。確認に失敗した場合、システムは X を含むすべての SNS への投稿を中止しなければならない (SHALL)。確認項目は、接続先への到達、認証、Chrome タブ、対象アカウントでのログイン、投稿欄の有無、下書きの有無、排他状態とする。
+
+システムは、X が選択されていない場合は、この事前確認を行ってはならない (SHALL NOT)。
+
+#### Scenario: Tailscale 未接続で X が選択されている（Tailscale is not connected）
+
+- **GIVEN** X が投稿対象に選択されている
+- **AND** クライアントが tailnet に参加していない、またはホスト Mac が停止している
+- **WHEN** ユーザーが投稿ボタンを押下する
+- **THEN** `GET /health` が失敗し、Bluesky・Threads・Misskey を含むすべての SNS への投稿が中止される
+- **AND** Tailscale 接続とホスト Mac の状態を確認する旨が表示される
+
+#### Scenario: X の接続先が投稿不可（X is not ready）
+
+- **GIVEN** X が投稿対象に選択されている
+- **AND** `GET /health` が `ok: false`（Chrome 未起動・未ログイン・投稿欄なし・権限不足など）を返す
+- **WHEN** ユーザーが投稿ボタンを押下する
+- **THEN** すべての SNS への投稿が中止され、理由が表示される
+
+#### Scenario: X が別の投稿を処理中（X is busy）
+
+- **GIVEN** X が投稿対象に選択されている
+- **AND** `GET /health` が `busy: true` を返す
+- **WHEN** ユーザーが投稿ボタンを押下する
+- **THEN** すべての SNS への投稿が中止され、しばらく待つ旨が表示される
+
+#### Scenario: X の投稿欄に下書きがある（Draft exists）
+
+- **GIVEN** X が投稿対象に選択されている
+- **AND** `GET /health` が `draft_exists: true` を返す
+- **WHEN** ユーザーが投稿ボタンを押下する
+- **THEN** すべての SNS への投稿が中止され、下書きを消す旨が表示される
+
+#### Scenario: X が選択されていない（X is not selected）
+
+- **GIVEN** X が投稿対象に選択されていない
+- **WHEN** ユーザーが投稿ボタンを押下する
+- **THEN** 事前確認は行われず、選択された SNS へ通常通り投稿される
+
 ### Requirement: 非対応機能の除外（Exclude unsupported features）
 
 システムは、画像・動画・リプライ元・引用元のいずれかが指定されている場合、X を投稿対象として選択させてはならない (SHALL NOT)。システムは、X が選択された状態でこれらの要素が追加された場合、X の選択を自動的に解除し、チェックボックスを無効化しなければならない (SHALL)。
