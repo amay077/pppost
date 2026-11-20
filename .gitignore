@@ -26,3 +26,9 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Python (x-post-api)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+x-post-api/.x-post-api.lock

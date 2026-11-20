@@ -7,6 +7,7 @@ import twitterText from "twitter-text";
 import BlueskyConnection from "./BlueskyConnection.svelte";
 import ThreadsConnection from "./ThreadsConnection.svelte";
 import MisskeyConnection from "./MisskeyConnection.svelte";
+import XConnection from "./XConnection.svelte";
 import { loadMessage, loadPostSetting, loadSessionId, saveMessage, savePostSetting, saveSessionId, type SettingType } from "./func";
 import { Config } from "../config";
 import { getApiVersion, getSpaVersion, loadMyPosts, postSettings, postTo, postToSns, type Post, type PresentedPost, type ImageData, type PostError } from "./MainContent"; // .ts 拡張子を削除
@@ -186,6 +187,7 @@ let replyToPost: PresentedPost = {
     bluesky: undefined,
     threads: undefined,
     misskey: undefined,
+    x: undefined,
   }
 };
 let expandedQuote = false;
@@ -196,6 +198,7 @@ let quoteToPost: PresentedPost = {
     bluesky: undefined,
     threads: undefined,
     misskey: undefined,
+    x: undefined,
   }
 };
 
@@ -207,6 +210,7 @@ const emptyPresentedPost = (): PresentedPost => ({
     bluesky: undefined,
     threads: undefined,
     misskey: undefined,
+    x: undefined,
   }
 });
 
@@ -222,9 +226,22 @@ const onChangeQuoteTarget = () => {
   }
 };
 
-// Twitter 文字数カウント
-$: tweetLength = twitterText.parseTweet(text).weightedLength / 2; // エクスポートされた名前空間を使用
-const TWITTER_WARN_LENGTH = 140; // 現在のTwitterの文字数上限（警告を出す文字数）
+// X の重み付き文字数（URL は 23、東アジア文字は 2）
+const X_MAX_WEIGHTED_LENGTH = 280;
+$: weightedLength = twitterText.parseTweet(text).weightedLength;
+
+// X はテキスト投稿のみ。画像・動画・リプライ・引用がある場合は選択を解除する。
+$: xUnsupported = images.length > 0 || videoFile != null
+  || replyToPost?.display_posted_at != undefined
+  || quoteToPost?.display_posted_at != undefined;
+$: if (xUnsupported && postTo.x) {
+  postTo.x = false;
+  const setting = postSettings.x;
+  if (setting != null) {
+    setting.enabled = false;
+    savePostSetting(setting);
+  }
+}
 
 // Swarm URLをスクレイピングして投稿テキストを生成する関数
 const scrapeSwarmCheckin = async (swarmUrl: string): Promise<boolean> => {
@@ -660,6 +677,7 @@ const onChangePostSettings = () => {
   postSettings.bluesky = loadPostSetting('bluesky');
   postSettings.threads = loadPostSetting('threads');
   postSettings.misskey = loadPostSetting('misskey');
+  postSettings.x = loadPostSetting('x');
 
   Object.entries(postTo).forEach(([k, v]) => {
     postTo[k as SettingType] = postSettings?.[k as SettingType]?.enabled ?? false;
@@ -754,6 +772,12 @@ const getTypes = (post: PresentedPost) => {
       <MisskeyConnection on:onChange={onChangePostSettings} />
     </div>
   </div>
+  <div class="form-check mb-0 d-flex flex-row align-items-start gap-1">
+    <input class="mt-1 form-check-input" type="checkbox" bind:checked={postTo.x} id="x" disabled={postSettings.x == null || xUnsupported} on:change={(e) => onTogglePostTo(e, 'x')}>
+    <div class="w-100">
+      <XConnection on:onChange={onChangePostSettings} />
+    </div>
+  </div>
 </div>
 
 <div class="mt-4">
@@ -768,8 +792,8 @@ const getTypes = (post: PresentedPost) => {
         </div>
         {/if}
       </span>
-      <span class:text-danger={tweetLength > TWITTER_WARN_LENGTH}> <!-- 文字数表示エリア -->
-        {tweetLength} / {TWITTER_WARN_LENGTH} 文字
+      <span class:text-danger={weightedLength > X_MAX_WEIGHTED_LENGTH} title="X の重み付き文字数（URL は 23、日本語は 2）"> <!-- 文字数表示エリア -->
+        {weightedLength} / {X_MAX_WEIGHTED_LENGTH}
       </span>
     </div>
     <textarea
@@ -783,7 +807,7 @@ const getTypes = (post: PresentedPost) => {
   </div>
   <div class="d-flex justify-content-between align-items-center"> <!-- ボタンと文字数を横並びにするための div -->
     <div class="d-flex flex-row gap-2"> <!-- ボタンを左寄せするための div -->
-    <button class="btn btn-primary" on:click="{() => post()}" disabled={isProcessingText || isRefreshingSession || posting || posted || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x)}>
+    <button class="btn btn-primary" on:click="{() => post()}" disabled={isProcessingText || isRefreshingSession || posting || posted || text.length <= 0 || Array.from(Object.values(postTo)).every(x => !x) || (postTo.x && !postTo.bluesky && !postTo.threads && !postTo.misskey && weightedLength > X_MAX_WEIGHTED_LENGTH)}>
 
     {#if posting}
     <div class="spinner-border spinner-border-sm" role="status">
@@ -800,6 +824,9 @@ const getTypes = (post: PresentedPost) => {
       {/if}
       {#if postSettings.misskey != null && postTo.misskey}
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8.91076 16.8915c-1.03957.0038-1.93213-.6294-2.35267-1.366-.22516-.3217-.66989-.4364-.6761 0v2.0148c0 .8094-.29152 1.5097-.87581 2.1002-.56755.573-1.25977.8595-2.0779.8595-.80014 0-1.49298-.2865-2.07727-.8601C.28408 19.05 0 18.3497 0 17.5403V6.45968c0-.62378.17553-1.18863.52599-1.69455.36657-.52284.83426-.88582 1.4018-1.08769a2.84574 2.84574 0 0 1 1.00049-.17742c.90125 0 1.65239.35421 2.25281 1.06262l2.99713 3.51572c.06699.05016.263.43696.73192.43696.47016 0 .6916-.3868.75796-.43758l2.9717-3.5151c.6178-.70841 1.377-1.06262 2.2782-1.06262.3337 0 .6675.05893 1.0012.17742.5669.20187 1.0259.56422 1.377 1.08769.3665.50592.5501 1.07077.5501 1.69455V17.5403c0 .8094-.2915 1.5097-.8758 2.1002-.5675.573-1.2604.8595-2.0779.8595-.8008 0-1.493-.2865-2.0779-.8601-.5669-.5899-.8504-1.2902-.8504-2.0996v-2.0148c-.0496-.5499-.5303-.2032-.7009 0-.4503.8431-1.31369 1.3616-2.35264 1.366ZM21.447 8.60998c-.7009 0-1.3015-.24449-1.8019-.73348-.4838-.50571-.7257-1.11277-.7257-1.82118s.2419-1.30711.7257-1.79611c.5004-.50571 1.101-.75856 1.8019-.75856.7009 0 1.3017.25285 1.8025.75856.5003.489.7505 1.0877.7505 1.79611 0 .70841-.2502 1.31547-.7505 1.82118-.5008.48899-1.1016.73348-1.8025.73348Zm.0248.50655c.7009 0 1.2935.25285 1.7777.75856.5003.50571.7505 1.11301.7505 1.82181v6.2484c0 .7084-.2502 1.3155-.7505 1.8212-.4838.489-1.0764.7335-1.7777.7335-.7005 0-1.3011-.2445-1.8019-.7335-.5003-.5057-.7505-1.1128-.7505-1.8212v-6.2484c0-.7084.2502-1.3157.7505-1.82181.5004-.50571 1.101-.75856 1.8019-.75856Z"/></svg>
+      {/if}
+      {#if postSettings.x != null && postTo.x}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
       {/if}
       <span>Post</span>
     </div>

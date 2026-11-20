@@ -1,7 +1,11 @@
 import { Config } from "../config";
-import { type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId, fetchWithTimeout } from "./func";
+// @ts-ignore-next-line
+import twitterText from "twitter-text";
+import { type SettingDataBluesky, type SettingDataThreads, type SettingDataMisskey, type SettingDataX, loadPostSetting, type SettingType, loadMessage, savePostSetting, loadSessionId, fetchWithTimeout } from "./func";
 import dayjs from "dayjs";
 import { uploadBlobToStorage, uploadImageToStorage } from "./storage-client";
+
+const X_MAX_WEIGHTED_LENGTH = 280;
 
 // トークンを要する API 呼び出しに付与する共通ヘッダを組み立てる。
 // トークンはサーバー保管のため、クライアントは Bearer セッション ID のみを送る。
@@ -15,7 +19,7 @@ const buildAuthHeaders = (contentType: string): Record<string, string> => {
 };
 
 // 投稿失敗の原因分類
-export type PostErrorType = 'timeout' | 'network' | 'auth' | 'server' | 'rejected';
+export type PostErrorType = 'timeout' | 'network' | 'auth' | 'server' | 'rejected' | 'unknown';
 
 // 各 SNS への投稿結果
 export interface PostResult {
@@ -70,6 +74,7 @@ const ERROR_TYPE_MESSAGES: { [K in PostErrorType]: string } = {
   auth: '認証エラーです。接続を確認してください',
   server: 'サーバーエラーが発生しました',
   rejected: '投稿が拒否されました',
+  unknown: '結果を確認できませんでした。二重投稿防止のため再実行しないでください',
 };
 
 // 投稿結果をユーザー表示用のエラーへ変換する
@@ -124,16 +129,19 @@ export const postSettings: {
   bluesky: SettingDataBluesky | null,
   threads: SettingDataThreads | null,
   misskey: SettingDataMisskey | null,
+  x: SettingDataX | null,
 } = {
   bluesky: loadPostSetting('bluesky'),
   threads: loadPostSetting('threads'),
   misskey: loadPostSetting('misskey'),
+  x: loadPostSetting('x'),
 };
 
 export const postTo: { [K in SettingType]: boolean } = {
   bluesky: postSettings?.bluesky?.enabled ?? false,
   threads: postSettings?.threads?.enabled ?? false,
   misskey: postSettings?.misskey?.enabled ?? false,
+  x: postSettings?.x?.enabled ?? false,
 };
 
 export async function getApiVersion(): Promise<{ build_at: string }> {
@@ -181,18 +189,24 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
     case 'misskey':
       promises.push(loadMyPostsMisskey().then(posts => ({ type: 'misskey', posts })));
       break;
+    case 'x':
+      // X は投稿一覧を取得する API を持たないため、候補には含めない
+      break;
     }
   }
   const posts = await Promise.allSettled(promises);
 
-  const succeededPosts = posts.filter((p) => p.status == 'fulfilled').map(x => x.value).reduce((acc, cur) => {
+  const succeededPosts = posts
+    .filter((p): p is PromiseFulfilledResult<{ type: string; posts: Post[] }> => p.status == 'fulfilled')
+    .map(x => x.value)
+    .reduce((acc, cur) => {
 
-    (cur?.posts ?? []).forEach((p) => {
-      acc.push({ type: cur.type as SettingType, post: p });
-    });
-    
-    return acc;
-  }, [] as { type: SettingType, post: Post }[]);
+      (cur?.posts ?? []).forEach((p) => {
+        acc.push({ type: cur.type as SettingType, post: p });
+      });
+
+      return acc;
+    }, [] as { type: SettingType, post: Post }[]);
 
   const trimText = (text: string) => {
     const max = 50;
@@ -272,7 +286,7 @@ export const loadMyPosts = async (): Promise<PresentedPost[]> => {
           group: {
             display_posted_at: dayjs(post.posted_at).format('M/DD H:mm'),
             trimmed_text: trimText(post.text),
-            postOfType: { bluesky: undefined, threads: undefined, misskey: undefined }
+            postOfType: { bluesky: undefined, threads: undefined, misskey: undefined, x: undefined }
           },
           times: [],
         };
@@ -344,6 +358,10 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
 
   const enableTypes = Array.from(Object.entries(postTo)).filter(([_, v]) => v).map(([k, v]) => (k as SettingType));
 
+  const hasReplyOrQuote =
+    Object.values(options?.reply_to_ids ?? {}).some((value) => (value?.length ?? 0) > 0) ||
+    Object.values(options?.quote_to_ids ?? {}).some((value) => (value?.length ?? 0) > 0);
+
   const promises = [];
   
   for (const type of enableTypes) {
@@ -356,6 +374,14 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
       break;
     case 'misskey':
       promises.push(postToMisskey(text, uploadedImageUrls, uploadedVideoUrl, options?.reply_to_ids?.misskey, options?.quote_to_ids?.misskey).then((r) => { if (!r.ok) errors.push(buildPostError('Misskey', r)) }));
+      break;
+    case 'x':
+      if (uploadedImageUrls.length > 0 || uploadedVideoUrl != null || hasReplyOrQuote) {
+        // UI 側で X を外しているが、念のためサーバーに送らない
+        errors.push({ sns: 'X', errorType: 'rejected', message: 'X はテキスト投稿のみに対応しています。画像・動画・リプライ・引用を外してください' });
+      } else {
+        promises.push(postToX(text).then((r) => { if (!r.ok) errors.push(buildPostError('X', r)) }));
+      }
       break;
     }
 
@@ -377,6 +403,74 @@ export const postToSns = async (text: string, imageDataURLs: string[], options: 
   }
 
   return { errors };
+};
+
+// x-post-api のエラーコードをフロントエンドの分類へ変換する
+const mapXError = (code: string | undefined, status: number): PostErrorType => {
+  if (code === 'UNAUTHORIZED' || status === 401) return 'auth';
+  if (code === 'UNKNOWN_STATE') return 'unknown';
+  if (code === 'NO_CHROME_TAB' || code === 'CHROME_PERMISSION' || status >= 500) return 'server';
+  if (status >= 400) return 'rejected';
+  return 'server';
+};
+
+// X はテキストのみ。クリック後の自動リトライは行わない。
+const postToX = async (text: string): Promise<PostResult> => {
+  const setting = postSettings.x;
+  if (setting == null) {
+    return { ok: false, errorType: 'auth', message: 'X に接続していません。X の接続設定を確認してください' };
+  }
+
+  const xText = text.trim();
+  const parsed = twitterText.parseTweet(xText);
+  if (!parsed.valid || parsed.weightedLength > X_MAX_WEIGHTED_LENGTH) {
+    return {
+      ok: false,
+      errorType: 'rejected',
+      message: `X の文字数上限（${X_MAX_WEIGHTED_LENGTH}）を超えています（${parsed.weightedLength}）`,
+    };
+  }
+
+  const baseUrl = setting.api_base_url.trim().replace(/\/+$/, '');
+  if (baseUrl.length == 0) {
+    return { ok: false, errorType: 'auth', message: 'X の API URL が設定されていません' };
+  }
+
+  try {
+    const res = await fetchWithTimeout(`${baseUrl}/post`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${setting.api_token}`,
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      body: JSON.stringify({ text: xText }),
+    }, 30000);
+
+    if (res.ok) {
+      return { ok: true };
+    }
+
+    let body: any = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+
+    const code = typeof body?.error === 'string' ? body.error : undefined;
+    const message = typeof body?.message === 'string' && body.message.length > 0
+      ? body.message
+      : `x-post-api が HTTP ${res.status} を返しました`;
+    return { ok: false, errorType: mapXError(code, res.status), message };
+  } catch (error) {
+    console.error(`postToX -> error:`, error);
+    return {
+      ok: false,
+      errorType: classifyRequestError(error),
+      message: 'x-post-api に接続できません。Tailscale とホスト Mac の状態を確認し、X に投稿済みでないことを確認してから再実行してください',
+    };
+  }
 };
 
 

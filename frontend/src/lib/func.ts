@@ -21,13 +21,23 @@ export type SettingDataMisskey = {
   username: string,
 };
 
-export type SettingData = SettingDataBluesky | SettingDataThreads | SettingDataMisskey;
+export type SettingDataX = {
+  type: 'x',
+  title: 'X',
+  enabled: boolean,
+  api_base_url: string,
+  api_token: string,
+  account: string,
+};
+
+export type SettingData = SettingDataBluesky | SettingDataThreads | SettingDataMisskey | SettingDataX;
 
 export type SettingType = SettingData['type'];
 
 export type SettingDataType<T extends SettingType> =
   T extends 'threads' ? SettingDataThreads :
   T extends 'misskey' ? SettingDataMisskey :
+  T extends 'x' ? SettingDataX :
   SettingDataBluesky;
 
 export function savePostSetting(data: SettingData) {

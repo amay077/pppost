@@ -1,11 +1,12 @@
 # PPPOST
 
-PPPOST は、Bluesky・Threads・Misskey に一つの画面から同時投稿できるマルチプラットフォーム対応のソーシャルメディア投稿アプリケーションです。Svelte 製フロントエンドと Netlify Functions ベースのバックエンドを備えたモノレポ構成になっています。
+PPPOST は、Bluesky・Threads・Misskey・X に一つの画面から同時投稿できるマルチプラットフォーム対応のソーシャルメディア投稿アプリケーションです。Svelte 製フロントエンド、Netlify Functions ベースのバックエンド、macOS 上の Chrome を操作する `x-post-api` を備えたモノレポ構成になっています。
 
 ## できること
 
-- Bluesky・Threads・Misskey への同時投稿
+- Bluesky・Threads・Misskey・X への同時投稿
   - Misskey は MiAuth による接続で、任意のホスト（既定値 `misskey.io`）を接続時に入力できる。アプリの事前登録・環境変数の追加は不要
+  - X はテキスト投稿のみ。`x-post-api` を tailnet 経由で呼び出す（画像・動画・リプライ・引用は不可）
 - テキスト・画像・動画の投稿
   - 動画は 1 本のみ・MP4・100MB 以内・3 分以内（最も制限の厳しい Bluesky の仕様に合わせる）
   - 動画を添付した場合は画像を添付できない（画像と動画の併用は不可）
@@ -26,14 +27,17 @@ PPPOST は、Bluesky・Threads・Misskey に一つの画面から同時投稿で
 
 - `/frontend` : TypeScript・Vite・PWA サポートを備えた Svelte 4 の SPA
 - `/backend` : Netlify Functions で構築したサーバーレス API 群
+- `/x-post-api` : macOS 上の Chrome を操作する X 投稿 API（Python 3.9+・標準ライブラリのみ）
 - ルートディレクトリ : 共有設定やドキュメントを配置
 
 **主要技術スタック**
 
 - フロントエンド: Svelte 4、TypeScript、Vite 5、Bootstrap 5、@atproto/api (Bluesky 用)
 - バックエンド: Node.js サーバーレス関数、twitter-api-v2、cheerio/jsdom
+- X 投稿: Python 3.9+（標準ライブラリのみ）、AppleScript、Google Chrome、Docker の Tailscale コンテナ
 - 認証: Bluesky SDK、Threads OAuth (Meta)、Misskey MiAuth
   - 取得したトークンはいずれもサーバー側 (Cloudflare D1) に暗号化保管し、クライアントには匿名セッション ID のみを返す
+  - X の `x-post-api` トークンは例外的にブラウザの `localStorage` に保存し、Netlify バックエンドには送らない
 
 ## 開発コマンド
 
@@ -54,6 +58,15 @@ cd backend
 npm install
 npm run dev         # Netlify Functions を http://localhost:9000 で起動
 ```
+
+### x-post-api
+
+```bash
+cd x-post-api
+python3 -m unittest discover -s tests -t . -v
+```
+
+セットアップと運用手順は [x-post-api/README.md](x-post-api/README.md) を参照してください。
 
 ### 両方を同時に実行
 
@@ -127,7 +140,7 @@ openspec/changes/PPP-005-add-threads-support/  ← proposal (親)
 ## 主要な実装パターン
 
 - 新しいソーシャルプラットフォーム追加  
-  現時点では共通化された手順が確立されていないため、既存の Bluesky/Twitter 実装を参考に個別対応してください。
+  現時点では共通化された手順が確立されていないため、既存の Bluesky/Threads/Misskey 実装を参考に個別対応してください。
 - 動画投稿の非同期 2 段階化
   SNS 側のメディア処理（エンコード・サムネイル生成）は数十秒かかり、Netlify 同期 Function の実行時間制限（10〜30 秒）内に完了しない。そのため、動画投稿は以下で構成される。
   1. 投稿エンドポイントがメディアの受け付け（アップロード/コンテナ作成）を行い、処理中は HTTP 202（処理中 + ジョブ ID）を返す
@@ -154,13 +167,14 @@ exports.handler = async (event, context) => {
 
 ### 各 SNS のテキスト形式の違い
 
-- **Twitter/X**: Yahoo リアルタイム検索経由でスクレイピングするため、URL が省略形（`docs.github.com/ja/copilot/get…`）で含まれる場合がある。投稿時刻の正確な取得は不可能。
 - **Bluesky**: Bluesky SDK 経由でプレーンテキストとして取得
+- **Threads**: Threads API 経由で取得。本文に URL が含まれることがある
 - **Misskey**: Misskey API (`users/notes`) 経由でプレーンテキストとして取得。画像のみのノートは `text` が `null` になるため空文字として扱う
+- **X**: 投稿一覧を取得しないため、リプライ/引用のグループ化対象外
 
 ### リプライ元選択でのグループ化ロジック
 
-同一内容の投稿を複数 SNS から取得した際、リプライ元選択ドロップダウンで1つのグループとして表示するため、以下の正規化処理を行います（`frontend/src/lib/MainContent.ts:normalizeTextForGrouping`）：
+同一内容の投稿を複数 SNS から取得した際、リプライ元選択ドロップダウンで1つのグループとして表示するため、以下の正規化処理を行います（`frontend/src/lib/MainContent.ts:normalizeText`）：
 
 1. **URL の除去**: `https?://[^\s]+` パターンにマッチする URL を削除
 2. **HTML タグの除去**: `<[^>]+>` パターンにマッチするタグを削除
@@ -172,31 +186,37 @@ exports.handler = async (event, context) => {
 この正規化により、以下のような微妙な違いがあっても同一グループとして扱われます：
 
 ```javascript
-// Twitter/X (Yahoo経由)
-"docs.github.com/ja/copilot/get… 会社で Copilot Business...。 3〜4日..."
+// Threads（本文に URL が含まれる）
+"会社で Copilot Business...。 https://example.com 3〜4日..."
 
 // Bluesky
 "会社で Copilot Business...。3〜4日..."
 ```
 
-### Twitter/X の制約事項
+### X の制約事項（x-post-api）
 
-Yahoo リアルタイム検索を利用した Twitter/X のスクレイピングでは、正確な投稿時刻を取得できません。そのため、投稿時刻を基準としたグループ化は行わず、テキスト内容のみでグループ化しています。
+- X はテキスト投稿のみ（画像・動画・リプライ・引用は不可）
+- ホスト Mac の Chrome、macOS の自動化許可、Docker の Tailscale コンテナが必要
+- X の投稿一覧は取得しないため、リプライ/引用の候補には表示されない
+- 結果不明（`UNKNOWN_STATE`）の場合は自動再投稿しない。X で確認してから人間の判断で再実行する
 
 ## セキュリティ
 
 - アカウント設定はローカルストレージに平文 JSON で保存されるため、端末共有や XSS に対して漏洩リスクがある。暗号化対応が今後の課題。
+- X の `x-post-api` トークンも `localStorage` に保存する。tailnet 内でしか使えないが、端末の共有には注意する。
 - API キーやシークレットは環境変数で管理
+- `x-post-api` は `127.0.0.1` にのみ bind し、Tailscale コンテナ経由で tailnet 内だけに公開する
 - クロスオリジン対策として `/backend/netlify/functions/cors_proxy.js` を利用
 
 ## テスト
 
-- 現状は `/backend/test.http` を使った手動テストのみ
-- 自動テストスイートは未整備
+- `x-post-api` は `unittest` による単体テストあり（Chrome はモック）
+- フロントエンドとバックエンドは手動テストが中心
+- 手順は [x-post-api/README.md](x-post-api/README.md) を参照
 
 ## デプロイ
 
-フロントエンドとバックエンドは別々のホスティングに、いずれも `main` ブランチへの push で自動デプロイされます。
+フロントエンドとバックエンドは別々のホスティングに、いずれも `main` ブランチへの push で自動デプロイされます。`x-post-api` はホスト Mac 上で動くため、ホスティングサービスへのデプロイはありません。
 
 ### フロントエンド（GitHub Pages）
 
@@ -210,6 +230,12 @@ Yahoo リアルタイム検索を利用した Twitter/X のスクレイピング
 - 関数ディレクトリは `backend/netlify/functions`、設定は `/backend/netlify.toml`
 - 環境変数（各 SNS の認証情報、データ暗号化キー、Cloudflare R2 の認証情報など）は Netlify の環境変数で管理
 
+### X 投稿 API（x-post-api）
+
+- ホスティングサービスにはデプロイしない。ホスト Mac 上で launchd により常駐する
+- Docker の Tailscale コンテナが tailnet の入口になる
+- セットアップ手順は [x-post-api/README.md](x-post-api/README.md) を参照
+
 ### 画像の一時ストレージ（Cloudflare R2）
 
 - 投稿画像は Cloudflare R2 に一時保存し、各 SNS へ渡したあとに削除する
@@ -222,6 +248,9 @@ Yahoo リアルタイム検索を利用した Twitter/X のスクレイピング
 2. 動画の許容上限は 100MB・3 分以内（最も制限の厳しい Bluesky の仕様に合わせる。Threads は 5 分・Misskey はサーバー設定依存でこれより緩い）
 3. 動画投稿時のリプライ・引用は不可（通常投稿のみ）
 4. ローカルストレージに保存した接続情報が平文のまま保持される（暗号化未対応）
+5. X はテキスト投稿のみ（画像・動画・リプライ・引用は不可）
+6. X の投稿にはホスト Mac の Chrome と Docker の Tailscale コンテナが必要（Mac のスリープ中は不可）
+7. X の投稿一覧は取得しないため、リプライ/引用の候補には表示されない
 
 ## License
 

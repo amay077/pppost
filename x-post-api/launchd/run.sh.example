@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+mkdir -p logs
+
+if [ ! -f .env ]; then
+  echo "x-post-api/.env がありません。.env.example をコピーして設定してください。" >&2
+  exit 1
+fi
+
+set -a
+source .env
+set +a
+
+exec "${X_API_PYTHON:-/usr/bin/python3}" x_api.py
